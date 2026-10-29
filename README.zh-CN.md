@@ -126,11 +126,13 @@
   **不要再用 `--dsw-alias-label-caption`（#adb2b8）与 `-dimmed`（#e1e5ee）**：浅色底上对比度只有
   约 2.2:1 / 1.2:1，等于把信息画没了（上一版正是把徽标右值、区块标签、计数、分组头全交给这两档）。
   字号收敛为 14（卡片标题）/ 13（行文本）/ 12（标签、计数）/ 11（分组头）四档。
-- **强调色只有一条来源**：`--sc-accent` = `--dsw-alias-state-business-primary`（浅色 `#4176e6` / 暗色
-  `deepseek-400`）、`--sc-accent-weak` = `-state-business-tertiary`（浅色 `#e4edfd` / 暗色 `#34415b`）、
-  `--sc-ok`/`--sc-ok-weak` = `-state-success-primary` / `-state-success-tertiary`。主题里**没有紫色系
-  token**，参考图的淡紫高亮在这里一律映射为 business 蓝；进度条轨道用 `--sc-track`
-  （= `--dsw-alias-border-l2`），不要在组件里现写颜色。
+- **强调色只有一条来源**：`.sc_card` 上 `--sc-theme: var(--dsw-static-green-500)`（默认绿），
+  `--sc-accent` = `--sc-theme`，弱底色 `--sc-accent-weak` 用 `color-mix` 现场调（16% 透明）；
+  换主题就覆盖 `--sc-theme`（四档 preset 见上文「高亮色」）。**不要再引入第二套高亮**
+  （早期的 `--sc-ok` 绿 + `--sc-accent` 蓝紫两路已经合并）：勾选环、进度条 `--sc-progressFill`、
+  状态 pill、状态圆点、计划灯泡、目标按钮、聚焦描边全部读 `--sc-accent`。
+  「错误 / 警告」色与彩色文件类型图标是语义色，不跟主题走。进度条轨道用 `--sc-track`
+  （= `--dsw-alias-interactive-bg-active`），不要在组件里现写颜色。
 - **行只有一处定义**：`Row` 组件 + `.sc_rowInner, .sc_rowBtn` 共用的
   `grid-template-columns: 16px minmax(0,1fr) auto`（图标列 · 弹性文本 · 右对齐数值）；
   子智能体行 `.sc_member` 是同一套网格的加强版：`auto minmax(0,1fr) auto 12px`
@@ -164,7 +166,7 @@
   `check` 的 path 只占 16 viewBox 中间约 58%，10px 时墨迹仅 ~5.8px，空心环里几乎看不见）、running 整颗环自转、
   idle 灰空圈）；成员卡的状态圆点 `.sc_mark[data-state]`
   只有静态三档（done 绿 / idle 灰 / warn·error）是 6px 实心点。**两处 running 都换成转圈**，同一套做法：
-  轨道取中性 `--dsw-alias-border-l4`、只把顶边点亮成各自的状态色（成员 `--sc-accent` 蓝、任务 `--sc-ok` 绿），
+  轨道取中性 `--dsw-alias-border-l4`、只把顶边点亮成 `--sc-accent`（成员与任务同一条高亮色），
   `.8s linear infinite` 转同一条 `sc_spin`；成员这边 6px 点位保持不动、`::after` 用 `inset:-2px` 画一颗
   10px 圆环，所以列宽不变、状态切换时文字不跳 4px。`prefers-reduced-motion:reduce` 时两处都关掉动画停在
   圆环上（仍读得出「进行中」）。节奏与写法照官方 spinner
