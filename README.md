@@ -6,7 +6,8 @@
 
 A permanent card floating at the **top-right corner of the content area** in DSH Web. It gathers the
 **to-do list**, the **goal**, the **plans you submitted**, the **files this session changed**, the
-mode badge and the **subagents** into one place — plus one line that says where this turn's time went.
+mode badge, the **subagents** and the **background jobs** into one place — plus one line that says where
+this turn's time went.
 
 The to-do list is collapsible and carries a progress bar; the goal can be **edited / paused / resumed /
 cleared** right inside the card; a submitted plan opens in the right-hand preview pane; a subagent row
@@ -30,6 +31,7 @@ while you are looking at a global panel (plugins, schedules, …).
 | Plans | Plans submitted in this session, served by the plugin's host route (`exit_plan_mode` titles, newest first, up to 20). A bare row (no fill, same width as the content above) with a self-drawn "bulb + sparks" glyph in the accent color and an external-link icon at the right end | Click a row to open that plan in the right-hand preview pane using the official `plan` preview type |
 | Changed files | Session-wide list of changed paths de-duplicated by path (colored file-type icon per extension — js / ts / json / py / rs / go / java / C family / shell / css / config (yaml·toml·ini) / sql / markdown / excel / html / image / pdf / ppt / video / word / generic code / other) with `+added / -deleted` totals. With several turns the list splits into "This turn · n files" and "Earlier changes · n files" | Click a row to open that file in the official change-review pane |
 | Subagents | Sub-sessions whose `parentId` points at this session; the row mirrors the official directory row: status dot + two-line text (spawn `label`; session title · mode · activity) + **token usage and elapsed time on separate right-aligned lines** + chevron. Rows are **grouped by delegation turn**: the current turn is expanded, older turns fold into "Earlier N turns · m". `agentTeam` teammates are not shown as a second row — a teammate already is a sub-session | Click a row to switch the whole workspace to that sub-session through `ctx.uiWorkspace.openSession(...)`. A teammate row without a session yet (still `provisioning`) is a fallback and is not clickable |
+| Background jobs | Jobs the agent started in the background, mirroring the host's own background-task panel: status dot, `bash` kind pill, the command in mono, the settled reason (`exit code: 0`) and the duration — or the live `2/10` progress while it runs. Running jobs are always listed; finished ones fold into a "n finished" group with a **Clear** button on the right | **Stop** on every running row (two-step, like the host: the 20×20 square turns into a red-outlined "Confirm stop" label, a second click sends it, 3s without a second click disarms). Read-only otherwise. **Clear** only hides finished rows in this browser session — the host keeps its records. Live output is still opened from the host's panel, not here |
 
 When to show: permanent on a session page (rendered whenever a main session exists). Blocks render when
 they have content; when everything is empty the body shows "No tasks or changes yet" — the card itself
@@ -42,6 +44,7 @@ stays. A turn's timing alone counts as content.
 | Session / project name / subagents | `useSessions` from the slot props (`sessions` projection) | Main session = the generation with `retainedBy.mainView > 0` |
 | To-dos / goal / teammates | `SessionSummary.projectionValues[key]` | Official, already-folded projection values; the client only reads them, a missing value hides the block |
 | Subagent delegation turn | `subagentTurns: { [childId]: turn }` from the same host route | The host records the turn in effect when it sees `subagent/catalog`; rows without an attribution are counted as the current turn |
+| Background jobs | `ctx.jobs` — the client service of `@deepseek-ai/dsh-api-job-controller`, obtained lazily with `ctx.inject(['jobs'], …)`: `state` (`getSnapshot()` / `subscribe`) for this session's rows, `watchRows(sessionId)` for the subscription lifetime, `kill(sessionId, jobId)` for the stop button | Rows are the host's own `JobView` (`id / kind / label / status / progress / detail / startedAt / finishedAt / output`); live = `running` or `stopping`; ordering matches the host panel (live by start time ascending, finished by finish time descending). The whole block disappears when the service is absent |
 | Changed files | Plugin host route `GET /api/status-card.changes?sessionId=…` | See "How it works" |
 | Submitted plans | `plans: [{ callId, title, seq }]` from the same route | Plan mode writes no file, the body only lives in the `exit_plan_mode` tool arguments; the host scans the session log for the index |
 | Goal actions | `ctx.remote.goals.edit / pause / resume / clear` (obtained lazily with `ctx.inject`) | Same host remote as the official goal bar, `{ id, revision }` CAS |
@@ -147,8 +150,8 @@ the plugin marketplace displays):
 | [icon.svg](icon.svg) | Plugin card icon: a small card floating in the corner |
 | [screenshots.json](screenshots.json) | Screenshot list consumed by the plugin marketplace |
 | [docs/VERIFICATION.md](docs/VERIFICATION.md) | What was verified on a real host, and what was not |
-| [test/smoke.mjs](test/smoke.mjs) | 101 smoke assertions, `npm test` |
-| [test/mutate.mjs](test/mutate.mjs) | 103 mutations proving the smoke assertions are not vacuous, `npm run test:mutate` |
+| [test/smoke.mjs](test/smoke.mjs) | 103 smoke assertions, `npm test` |
+| [test/mutate.mjs](test/mutate.mjs) | 103 mutations proving the smoke assertions are not vacuous, `npm run test:mutate` (each mutant only re-runs the cases it is expected to break; 8 in parallel, ~6s) |
 
 ## Known limitations
 
@@ -178,8 +181,11 @@ the plugin marketplace displays):
   reference. Whichever loses gets `GOAL_STALE_REVISION` and shows it.
 - The plan index survives a host restart (derived from the session log); per-file line counts do not,
   because `workspaceChanges.summary` is in-process.
-- Subagent elapsed time reflects the render instant (no per-row timer); the only timer is on the timing
-  line.
+- Subagent elapsed time reflects the render instant (no per-row timer); job durations tick once per second
+  and the turn-timing line recomputes once per second while waiting.
+- Background jobs are **read-only except Stop**: the card does not open live output, does not spawn, and
+  does not touch the host's job records. "Clear" only hides finished rows in this browser session, so a
+  refresh brings them back. Only jobs of the **current main session** are listed.
 
 ## License
 

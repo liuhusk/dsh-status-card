@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 import * as host from '../index.js';
 
 // 默认读同目录上一级的真实文件；SC_TARGET 仅在变异测试里指向临时副本。
+// SC_ONLY=F21,F22 只跑这几条用例（变异测试用来把每条变异缩到最小重跑集）；不设则全量。
 const TARGET = process.env.SC_TARGET ?? fileURLToPath(new URL('../client.js', import.meta.url));
 /** Host 半边：只做静态契约检查（形状类缺陷正是从这类盲区漏过去的，见 H1）。 */
 const HOST = fileURLToPath(new URL('../index.js', import.meta.url));
@@ -239,6 +240,10 @@ function setup({
   subagentAddress = undefined,
   // 工作区导航服务：官方用它从子智能体行跳到子会话；null 模拟服务缺席。
   withUiWorkspace = true,
+  // 后台任务行表：null 模拟「没装 job controller」（服务缺席）；给数组则挂上假服务。
+  jobsRows = null,
+  // `jobs.kill` 的返回对象：默认成功，给 {ok:false} 可验证失败提示。
+  jobKillResult = { ok: true },
 } = {}) {
   const styles = [];
   const fetchCalls = [];
@@ -287,6 +292,29 @@ function setup({
       return Promise.resolve(resultOf(call));
     },
   };
+  // 后台任务服务：`ctx.jobs`（官方 @deepseek-ai/dsh-api-job-controller 的客户端面）。
+  // 行表是夹具给的固定数组；kill 记下发过的调用，供「两段确认」断言。
+  const jobKills = [];
+  const jobWatched = [];
+  const jobListeners = new Set();
+  const jobs = jobsRows === null || jobsRows === undefined ? undefined : {
+    state: {
+      getSnapshot: () => ({ rows: { [MAIN]: jobsRows }, observed: new Set() }),
+      subscribe(listener) {
+        jobListeners.add(listener);
+        return () => jobListeners.delete(listener);
+      },
+    },
+    watchRows(sessionId) {
+      jobWatched.push(String(sessionId));
+      return () => {};
+    },
+    observe() {},
+    kill(sessionId, jobId) {
+      jobKills.push({ sessionId: String(sessionId), jobId: String(jobId) });
+      return Promise.resolve(jobKillResult);
+    },
+  };
   const ctx = {
     effect(fn) { const value = fn(); cleanups.push(value); return value; },
     locale: { register(ns, dicts) { locales.push({ ns, dicts }); return {}; } },
@@ -308,6 +336,7 @@ function setup({
     },
     // 工作区导航：官方 openSession(durable 子会话地址 | SessionId)。
     uiWorkspace: withUiWorkspace ? { openSession(target) { opens.push(target); } } : undefined,
+    jobs,
     remote: goalResult === null ? {} : { goals },
     sidebarRight: withSidebarRight
       ? {
@@ -325,6 +354,7 @@ function setup({
   return {
     manifest, plugin, requiredIds, ctx, card, locales, dicts, cleanups, slots, injections, resources, opens,
     serviceInjections, goals, goalCalls,
+    jobs, jobKills, jobWatched, jobListeners,
     styles, fetchCalls, contentEls, anchor, resizeListeners,
     css: styles.map((tag) => tag.textContent).join(''),
     t: makeT(dicts?.zh),
@@ -570,8 +600,20 @@ function expect(cond, detail) {
   if (!cond) throw new Error(detail);
 }
 
+// SC_ONLY：只跑指定前缀的用例（逗号分隔，如 `F21,F22`）。变异测试用它把每条变异跑成
+// 「只跑期望失败的那几条」，把 103 条变异从「每条都全量跑一遍」压到秒级；不设时跑全部。
+const ONLY = (process.env.SC_ONLY ?? '')
+  .split(',')
+  .map((item) => item.trim())
+  .filter(Boolean);
+const caseIdOf = (name) => String(name).split(' ')[0];
+
 const results = [];
 async function runCase(name, fn) {
+  if (ONLY.length > 0 && !ONLY.includes(caseIdOf(name))) {
+    console.log(`SKIP ${name}`);
+    return;
+  }
   try {
     await fn();
     results.push({ name, ok: true });
@@ -1759,6 +1801,114 @@ await runCase('F19 子智能体按委派轮次分组：当前轮摊开、早前�
   expect(actionNode(flatBlock, 'toggle-agent-rounds') === undefined, '没有轮次归属时不该摆折叠按钮');
 });
 
+await runCase('F21 后台任务块：结构照宿主面板、运行中常显、已结束折叠、停止走两段确认', async () => {
+  const now = Date.now();
+  const jobRow = (over) => ({
+    kind: 'bash',
+    output: { total: 0, earliest: 0 },
+    ...over,
+  });
+  const rows = [
+    jobRow({ id: 'job-live', label: 'pnpm run dev', status: 'running', startedAt: now - 5000, progress: '3/10' }),
+    jobRow({ id: 'job-ok', label: 'pnpm test', status: 'completed', startedAt: now - 90000, finishedAt: now - 45000, detail: 'exit code: 0' }),
+    jobRow({ id: 'job-bad', label: 'pnpm run lint', status: 'failed', startedAt: now - 60000, finishedAt: now - 59000, detail: 'exit code: 3' }),
+  ];
+  const { env, props, tree } = await render({ projections: {}, jobsRows: rows });
+  const block = blockOf(tree, 'jobs');
+  expect(block, '没有渲染 data-sc-block=jobs 的后台任务块');
+  expect(textOf(block).includes('后台任务'), `块标题缺失，实际 ${JSON.stringify(textOf(block))}`);
+  // 标题旁的计数与宿主面板同措辞。
+  expect(textOf(block).includes('1 个后台任务运行中'), `运行中计数文案不对，实际 ${JSON.stringify(textOf(block))}`);
+  // 只有活行常显，且是宿主面板那种「铺底 + 两行」的排布。
+  const liveLine = findAll(block, (node) => hasClass(node, 'sc_jobLine') && node.props['data-live'] === 'true');
+  expect(liveLine.length === 1, `应只有一条运行中的行，实际 ${liveLine.length}`);
+  const liveText = textOf(liveLine[0]);
+  expect(liveText.includes('pnpm run dev'), `活行没显示命令，实际 ${JSON.stringify(liveText)}`);
+  expect(liveText.includes('3/10'), `活行没显示宿主进度，实际 ${JSON.stringify(liveText)}`);
+  // 类型标签、等宽命令、进度、时长各就各位（与官方面板的行内构成一致）。
+  expect(findAll(liveLine[0], (node) => hasClass(node, 'sc_jobKind')).length === 1, '活行缺少类型标签');
+  expect(findAll(liveLine[0], (node) => hasClass(node, 'sc_jobLabel')).length === 1, '活行缺少等宽命令行');
+  expect(findAll(liveLine[0], (node) => hasClass(node, 'sc_jobSecondary')).length === 1, '活行缺少副行');
+  expect(textOf(findAll(liveLine[0], (node) => hasClass(node, 'sc_jobDuration'))[0]).includes('5秒'),
+    `活行时长应为 5秒，实际 ${JSON.stringify(textOf(liveLine[0]))}`);
+  // 「停止」是 20×20 的方形图标按钮（不是文字胶囊），初态不带文字。
+  const stopNode = actionNode(block, 'stop-job');
+  expect(stopNode, '运行中的行没有停止按钮');
+  expect(stopNode.props['data-kill-state'] === 'idle', `初态应为 idle，实际 ${JSON.stringify(stopNode.props['data-kill-state'])}`);
+  expect(textOf(stopNode) === '', `初态按钮只该有一颗图标，实际 ${JSON.stringify(textOf(stopNode))}`);
+  expect(findAll(stopNode, (node) => node.type === 'svg').length === 1, '停止按钮里没有方形图标');
+  expect(stopNode.props.title.includes('pnpm run dev'), `按钮 title 该带上命令，实际 ${JSON.stringify(stopNode.props.title)}`);
+
+  // 分组头：折叠开关 + 清空，箭头闭上时指右。
+  const section = findAll(block, (node) => hasClass(node, 'sc_jobSection'))[0];
+  expect(section, '没有「已结束」分组头');
+  const toggle = actionNode(block, 'toggle-settled-jobs');
+  expect(toggle, '分组头里没有折叠开关');
+  expect(textOf(toggle) === '已结束 2', `折叠开关文案为 ${JSON.stringify(textOf(toggle))}`);
+  expect(toggle.props['aria-expanded'] === false, '默认应是折叠态');
+  const chevron = findAll(toggle, (node) => hasClass(node, 'sc_jobChevron'))[0];
+  expect(chevron?.props['data-open'] === 'false', `折叠时箭头应为闭合态，实际 ${JSON.stringify(chevron?.props['data-open'])}`);
+  expect(actionNode(block, 'clear-settled-jobs'), '分组头里没有「清空」');
+
+  toggle.props.onClick();
+  const opened = blockOf(expand(await pump(env.card, props)), 'jobs');
+  expect(findAll(opened, (node) => hasClass(node, 'sc_jobLine')).length === 3, '展开后应铺开全部三行');
+  expect(textOf(opened).includes('exit code: 3'), `已结束行应显示结算原因，实际 ${JSON.stringify(textOf(opened))}`);
+  expect(findAll(opened, (node) => hasClass(node, 'sc_jobChevron'))[0].props['data-open'] === 'true', '展开后箭头应转正');
+  // 已结束的行是单行弱色、且不再有停止按钮。
+  const settledLine = findAll(opened, (node) => hasClass(node, 'sc_jobRow') && node.props['data-settled'] === 'true');
+  expect(settledLine.length === 2, `已结束的行应为 2 条，实际 ${settledLine.length}`);
+  expect(findAll(settledLine[0], (node) => hasClass(node, 'sc_stop')).length === 0, '已结束的行不该有停止按钮');
+
+  // 两段确认：第一下只上膛（按钮展开成「确认停止」），第二下才真的发 kill。
+  actionNode(opened, 'stop-job').props.onClick();
+  const armed = blockOf(expand(await pump(env.card, props)), 'jobs');
+  const armedStop = actionNode(armed, 'stop-job');
+  expect(armedStop.props['data-kill-state'] === 'armed', `上膛态应为 armed，实际 ${JSON.stringify(armedStop.props['data-kill-state'])}`);
+  expect(textOf(armedStop) === '确认停止', `上膛后按钮应显示「确认停止」，实际 ${JSON.stringify(textOf(armedStop))}`);
+  expect(env.jobKills.length === 0, `第一下不该发给服务，实际 ${JSON.stringify(env.jobKills)}`);
+  armedStop.props.onClick();
+  await tick();
+  const killed = blockOf(expand(await pump(env.card, props)), 'jobs');
+  expect(env.jobKills.length === 1, `应只发一次停止，实际 ${JSON.stringify(env.jobKills)}`);
+  expect(env.jobKills[0].jobId === 'job-live', `停止的对象不对，实际 ${JSON.stringify(env.jobKills[0])}`);
+  expect(env.jobKills[0].sessionId === MAIN, `停止没带主会话 id，实际 ${JSON.stringify(env.jobKills[0])}`);
+  expect(env.jobWatched.includes(MAIN), `roster 流没为本会话打开，实际 ${JSON.stringify(env.jobWatched)}`);
+  expect(actionNode(killed, 'stop-job').props['data-kill-state'] === 'idle', '成功后按钮应回到 idle');
+
+  // 服务回 ok:false：按钮进入 failed 态，不假装成功。
+  const failing = await render({ projections: {}, jobsRows: [rows[0]], jobKillResult: { ok: false } });
+  actionNode(blockOf(failing.tree, 'jobs'), 'stop-job').props.onClick();
+  actionNode(blockOf(expand(await pump(failing.env.card, failing.props)), 'jobs'), 'stop-job').props.onClick();
+  await tick();
+  const failedStop = actionNode(blockOf(expand(await pump(failing.env.card, failing.props)), 'jobs'), 'stop-job');
+  expect(failedStop.props['data-kill-state'] === 'failed', `失败态应为 failed，实际 ${JSON.stringify(failedStop.props['data-kill-state'])}`);
+  expect(failedStop.props.title === '停止失败', `失败后 title 应提示停止失败，实际 ${JSON.stringify(failedStop.props.title)}`);
+
+  // 「清空」只清这张卡的表：已结束的行消失，运行中的行照旧。
+  actionNode(opened, 'clear-settled-jobs').props.onClick();
+  const cleared = blockOf(expand(await pump(env.card, props)), 'jobs');
+  expect(findAll(cleared, (node) => hasClass(node, 'sc_jobLine')).length === 1, '清空后应只剩运行中的那一行');
+  expect(findAll(cleared, (node) => hasClass(node, 'sc_jobSection')).length === 0, '没有已结束的行时不该再摆分组头');
+});
+
+await runCase('F22 后台任务服务缺席时整块不出现；只有已结束任务时默认摊开', async () => {
+  const { tree } = await render(richOpts());
+  expect(blockOf(tree, 'jobs') === null, '没有 jobs 服务却渲染了后台任务块');
+  expect(blockOf(tree, 'task'), '后端任务服务缺席时卡片其余分区仍应渲染');
+
+  const now = Date.now();
+  const onlySettled = await render({
+    projections: {},
+    jobsRows: [{ id: 'job-done', kind: 'bash', label: 'pnpm build', status: 'completed', startedAt: now - 9000, finishedAt: now - 1000, output: { total: 0, earliest: 0 } }],
+  });
+  const block = blockOf(onlySettled.tree, 'jobs');
+  expect(block, '只有已结束任务时也该渲染后台任务块');
+  expect(textOf(block).includes('已结束 1'), `折叠文案为 ${JSON.stringify(textOf(block))}`);
+  expect(findAll(block, (node) => hasClass(node, 'sc_jobLine')).length === 1, '没有活任务时应默认摊开已结束的行');
+  expect(actionNode(block, 'stop-job') === undefined, '已结束的行不该有停止按钮');
+});
+
 await runCase('F20 轮次结束后「等你」定格（路由即使带上 idleSince 也不算，对话结束不该继续涨）', async () => {
   const now = Date.now();
   const { tree } = await render({
@@ -1837,10 +1987,12 @@ await runCase('F13 耗时条：本轮总耗时打头、细分在后，等你只�
   expect(blockOf(none.tree, 'timing') == null, '没有本轮耗时的会话里不该渲染耗时条');
 });
 
-await runCase('F14 分区顺序：状态条 → 计划 → 目标 → 任务 → 变更 → 子智能体', async () => {
+await runCase('F14 分区顺序：状态条 → 计划 → 目标 → 任务 → 变更 → 子智能体 → 后台任务', async () => {
   // 富 fixture 一次凑齐六个分区：todos/goal/team/permissions 走投影，计划与变更走路由响应。
   const { tree } = await render({
     ...richOpts(),
+    // 一条运行中的后台作业：顺带钉住「后台任务排在子智能体之后」。
+    jobsRows: [{ id: 'job-order', kind: 'bash', label: 'npm test', status: 'running', startedAt: 1e12 }],
     fetchImpl: () => okResponse({
       files: [
         { path: '/w/dsh-status-card/client.js', display: 'dsh-status-card/client.js', added: 12, deleted: 6, seq: 4, turn: 2, index: 0 },
@@ -1855,7 +2007,7 @@ await runCase('F14 分区顺序：状态条 → 计划 → 目标 → 任务 →
   expect(body, '没有 .sc_body');
   const order = findAll(body, (node) => typeof node.props?.['data-sc-block'] === 'string')
     .map((node) => node.props['data-sc-block']);
-  const expected = ['timing', 'plan', 'goal', 'task', 'changes', 'agents'];
+  const expected = ['timing', 'plan', 'goal', 'task', 'changes', 'agents', 'jobs'];
   expect(JSON.stringify(order) === JSON.stringify(expected),
     `分区顺序为 ${JSON.stringify(order)}，应为 ${JSON.stringify(expected)}`);
 });

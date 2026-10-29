@@ -6,8 +6,8 @@
  * @author liuh
  */
 import { readFileSync, writeFileSync, mkdtempSync } from 'node:fs';
-import { spawnSync } from 'node:child_process';
-import { tmpdir } from 'node:os';
+import { spawn } from 'node:child_process';
+import { cpus, tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -647,38 +647,85 @@ const MUTATIONS = [
   },
 ];
 
-const run = (targetFile) => {
-  const result = spawnSync(process.execPath, [SMOKE], {
-    env: { ...process.env, SC_TARGET: targetFile },
-    encoding: 'utf8',
+/**
+ * 跑一次冒烟：`only` 给了就只跑这几条（透传 SC_ONLY），变异测试因此不必为每条变异跑全量。
+ * 用 spawn 而不是 spawnSync，才能把 103 条变异压进一个并发池里跑。
+ */
+const run = (targetFile, only) => new Promise((resolve) => {
+  const env = { ...process.env, SC_TARGET: targetFile };
+  if (only && only.length > 0) env.SC_ONLY = only.join(',');
+  else delete env.SC_ONLY;
+  const child = spawn(process.execPath, [SMOKE], { env });
+  let out = '';
+  child.stdout.setEncoding('utf8').on('data', (chunk) => { out += chunk; });
+  child.stderr.setEncoding('utf8').on('data', (chunk) => { out += chunk; });
+  child.on('close', (status) => {
+    const failed = [...out.matchAll(/^FAIL (\S+)/gmu)].map((match) => match[1]);
+    const summary = out.match(/(\d+)\/(\d+) passed/u);
+    resolve({ code: status, failed, out, summary: summary?.[0] ?? '（无汇总）' });
   });
-  const out = `${result.stdout}\n${result.stderr}`;
-  const failed = [...out.matchAll(/^FAIL (\S+)/gmu)].map((match) => match[1]);
-  const summary = out.match(/(\d+)\/(\d+) passed/u);
-  return { code: result.status, failed, out, summary: summary?.[0] ?? '（无汇总）' };
+});
+
+// 并发度：留一颗核给编辑器/浏览器，最多 8。变异之间互不共享状态（各自一份临时副本），可安全并行。
+const LIMIT = Math.max(2, Math.min(8, cpus().length - 1));
+const started = Date.now();
+
+const report = (line, detail) => {
+  console.log(line);
+  if (detail) console.log(detail);
 };
 
-// 对照组：未经变异的真实文件必须全绿
-const control = run(REAL);
+// 对照组：未经变异的真实文件必须全绿（全量跑，不走 SC_ONLY）
+const control = await run(REAL);
 let ok = control.code === 0 && control.failed.length === 0;
-console.log(`${ok ? 'PASS' : 'FAIL'} M0 对照组（未变异真实文件）：${control.summary} exit=${control.code}`);
-if (!ok) console.log(control.out);
+report(`${ok ? 'PASS' : 'FAIL'} M0 对照组（未变异真实文件）：${control.summary} exit=${control.code}`, ok ? null : control.out);
 
+const jobs = [];
 for (const [index, mutation] of MUTATIONS.entries()) {
   if (!SRC.includes(mutation.from)) {
-    console.log(`FAIL ${mutation.name} —— 变异锚点在源文件里找不到，无法验证`);
-    ok = false;
+    jobs.push({ index, mutation, missing: true });
     continue;
   }
-  const mutated = SRC.split(mutation.from).join(mutation.to);
   const file = path.join(DIR, `client-m${index + 1}.js`);
-  writeFileSync(file, mutated, 'utf8');
-  const result = run(file);
-  const missed = mutation.expectFail.filter((prefix) => !result.failed.includes(prefix));
-  const good = result.code !== 0 && missed.length === 0;
-  console.log(`${good ? 'PASS' : 'FAIL'} ${mutation.name}：期望失败 ${JSON.stringify(mutation.expectFail)}，实际失败 ${JSON.stringify(result.failed)}，exit=${result.code}`);
-  if (!good) { ok = false; console.log(result.out); }
+  writeFileSync(file, SRC.split(mutation.from).join(mutation.to), 'utf8');
+  jobs.push({ index, mutation, file });
 }
 
-console.log(ok ? '\n变异测试全部符合预期（断言具备区分度）' : '\n变异测试存在问题（断言可能是恒真/锚点失效）');
+// 顺序输出（结果可能乱序完成，打印必须稳定，否则日志没法逐行对比）
+const lines = new Array(jobs.length);
+let printed = 0;
+const flush = () => {
+  while (printed < lines.length && lines[printed] !== undefined) {
+    report(lines[printed].line, lines[printed].detail);
+    if (!lines[printed].good) ok = false;
+    printed += 1;
+  }
+};
+
+let cursor = 0;
+const worker = async () => {
+  while (cursor < jobs.length) {
+    const job = jobs[cursor];
+    cursor += 1;
+    if (job.missing) {
+      lines[job.index] = { good: false, line: `FAIL ${job.mutation.name} —— 变异锚点在源文件里找不到，无法验证` };
+      flush();
+      continue;
+    }
+    const result = await run(job.file, job.mutation.expectFail);
+    const missed = job.mutation.expectFail.filter((prefix) => !result.failed.includes(prefix));
+    const good = result.code !== 0 && missed.length === 0;
+    lines[job.index] = {
+      good,
+      line: `${good ? 'PASS' : 'FAIL'} ${job.mutation.name}：期望失败 ${JSON.stringify(job.mutation.expectFail)}，实际失败 ${JSON.stringify(result.failed)}，exit=${result.code}`,
+      detail: good ? null : result.out,
+    };
+    flush();
+  }
+};
+
+await Promise.all(Array.from({ length: Math.min(LIMIT, jobs.length) }, () => worker()));
+
+const seconds = ((Date.now() - started) / 1000).toFixed(1);
+console.log(ok ? `\n变异测试全部符合预期（断言具备区分度，${MUTATIONS.length} 条，并发 ${LIMIT}，${seconds}s）` : `\n变异测试存在问题（断言可能是恒真/锚点失效，${seconds}s）`);
 process.exitCode = ok ? 0 : 1;

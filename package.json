@@ -1,6 +1,6 @@
 {
   "name": "@liuhusk/dsh-status-card",
-  "version": "0.21.1",
+  "version": "0.22.0",
   "private": true,
   "type": "module",
   "description": "A permanent status card in the top-right corner of the DSH content area: this turn's timing (model / tools / waiting), to-dos with progress, goal, submitted plans, changed files, and subagents.",

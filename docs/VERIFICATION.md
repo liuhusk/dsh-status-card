@@ -1,7 +1,8 @@
 # Verification status
 
 What has actually been checked, on which host, and what is still unverified. Test suites are part of the
-repository: `npm test` (101 smoke assertions) and `npm run test:mutate` (103 mutations).
+repository: `npm test` (103 smoke assertions) and `npm run test:mutate` (103 mutations; each mutant re-runs only the cases
+it is expected to break, via `SC_ONLY`, in an 8-way parallel pool — the control run is always full).
 
 Host used for the live checks: DSH 0.2.1-rc.3, Web UI served on `http://127.0.0.1:3080`, installed into the
 `web` profile with a `link:` to the working copy, macOS, light and dark themes.
@@ -11,7 +12,7 @@ Host used for the live checks: DSH 0.2.1-rc.3, Web UI served on `http://127.0.0.
 - Static checks: `node --check` on both halves, `package.json` / locale JSON parse, zh/en locale key sets
   identical, every manifest reference (`icon`, `exports`, `dsh.bundle.patch`, `files`) resolves,
   `client.js` has no top-level `export` (it is loaded through `window.__ModuleLoader__`).
-- Smoke, 101 assertions with a stubbed `__ModuleLoader__` and a React hook shim, rendering the seat
+- Smoke, 103 assertions with a stubbed `__ModuleLoader__` and a React hook shim, rendering the seat
   component directly: registration contract (inject array / seat `shell.overlay` / order / locale namespace
   / style injection), no color literals in the stylesheet, the official to-do dock selector, no render
   without a session, empty state still rendered and the main content element marked, a turn with only
@@ -35,6 +36,14 @@ Host used for the live checks: DSH 0.2.1-rc.3, Web UI served on `http://127.0.0.
   change reverts a manual expand, `1400+920` auto-expands, unmeasurable column width falls back to 820
   without writing padding, `prefers-reduced-motion` disables the transition, hysteresis dead zone
   (1300 collapsed → 1340 still collapsed → 1360 expands).
+- Background jobs, covered by `F21` / `F22` with a stubbed `jobs` service: running rows are always listed and
+  finished rows fold behind the "n finished" header (expanded by default when nothing is running), the row
+  structure matches the host panel (dot / kind pill / mono label / settled reason / duration), the duration
+  is formatted as `54秒`-style Chinese units and ticks once alive, stop is a two-step control that only calls
+  `kill(sessionId, jobId)` on the second click, the three `data-kill-state` values (`idle` / `armed` /
+  `pending` / `failed`), a rejected `kill` answers `{ ok: false }` and shows "Stop failed", `watchRows` is
+  called with the main session id, clearing finished rows is local-only, and the whole block disappears when
+  `ctx.jobs` is absent.
 - Feature assertions, 36: to-do block expanded by default and its fold state, plan block titles/count and
   two-segment `dsh-resource://plan/<sid>/<callId>` address (five-segment address for sub-sessions), plans
   ordered by `seq` descending with the "Untitled plan" fallback, goal buttons per phase with `{ id,
@@ -114,6 +123,13 @@ Host used for the live checks: DSH 0.2.1-rc.3, Web UI served on `http://127.0.0.
 - Teammate de-duplication: with one teammate plus its sub-session the block shows exactly one row (the
   sub-session, dot `done`) and the count pill reads `1`, matching the official subagent directory; before
   the fix the same queue produced two rows, one of them stuck on `running`.
+- Background jobs on a live page (viewport 2560, dpr 2, dark theme): the block rendered between "Changed
+  files" and "Subagents" with the title "后台任务", a muted "1 个后台任务运行中" tail, one live row (a real
+  `sleep 90` job: spinner dot, mono command at full 276px width, `bash` pill, duration ticking `8秒 → 13秒`,
+  a 20×20 square stop button at `data-kill-state=idle`) and the finished group (`› 已结束 4` + "清空") with
+  four settled rows showing `exit code: 0` and `54秒` / `1分24秒` / `4分9秒` / `1秒`. Measured against the
+  host panel: same row order (live first by start time, finished by finish time), same 20×20 button size,
+  same `-90deg → 0` chevron, same hairline above the group header.
 - Turn timing: after the host restart the route returns
   `{turn:20, modelMs:163965, toolMs:183922, waitSince:null}` and the line shows `This turn 5m48s` +
   `model 2m44s · tools 3m04s`. With an injected probe carrying `idleSince` (15s ago) four consecutive
@@ -147,5 +163,9 @@ Host used for the live checks: DSH 0.2.1-rc.3, Web UI served on `http://127.0.0.
   host half needs a `dsh web` restart, the client half only a page reload. The client half was checked on a
   live page (card renders, no console errors); the restart-time behavior of the new host fold is covered by
   the offline log run above plus assertions.
+- The **background-jobs stop button was never clicked on a live host**: the live page only had a running job
+  observed (rendering, ticking duration, chevron, clear), while `ctx.jobs.kill` success / failure and the
+  `armed` superscription are covered by `F21` with a stubbed service. Whether `kill` reaches the host job
+  controller in a real profile is therefore still unconfirmed.
 - The plugin marketplace's nightly build is outside this repository: whether `screenshots.json` is picked
   up, and how the store card looks, can only be confirmed after it runs.

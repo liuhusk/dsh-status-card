@@ -5,7 +5,7 @@
 [English](README.md) | [简体中文](README.zh-CN.md)
 
 在 DSH Web 的**内容区右上角**浮动一张卡片，汇总**任务**、**目标**、**已提交计划**、**本次变更文件**、
-模式状态与**子智能体**。任务可折叠且带进度条、目标可在卡片里**编辑 / 暂停 / 继续 / 清除**、
+模式状态、**子智能体**与**后台任务**。任务可折叠且带进度条、目标可在卡片里**编辑 / 暂停 / 继续 / 清除**、
 计划可点开在右栏预览、子智能体行可点开到对应会话。卡片跟随内容区缩放与右栏开合重定位，可折叠；
 **内容区收窄时正文会被卡片推着向左让位，推到极限卡片自动收成一颗圆钮，窗口再变宽又自动展开**；
 看全局面板（插件 / 定时任务等）时整卡自动隐藏。
@@ -32,6 +32,7 @@
 | 计划 | Host 路由带回的本会话已提交计划（`exit_plan_mode` 的标题，新的在前，最多 20 条）；行内是裸内容（**不铺底色**，与上方内容同宽；行首一颗自绘的「灯泡 + 周围闪光点」图标（强调色 + 两层 `drop-shadow` 柔光晕，不用实心）、行尾外链图标表示右栏预览；宽度撑满内容、行高紧凑（`4px` 上下内边距 + `1px` 行距）、悬停才浮出胶囊） | 点某行 → 用官方 `plan` 预览类型在右栏打开该计划正文 |
 | 本次变更 | 整会话按路径去重的文件清单（每行左侧是**彩色文件类型图标**，按扩展名分类型，**语言也各自分家**：js / ts / json / py / rs / go / java / C 系 / shell / css / 配置（yaml·toml·ini）/ sql / markdown / excel / html / image / pdf / ppt / video / word / 通用 code / other）+ `+added / -deleted` 合计；多轮改动时再按「本轮 · n 个文件」/「更早改动 · n 个文件」两段分组（本轮在前，只有一轮不出分组头） | 点某行 → 打开官方「变更审查」右栏的对应文件 |
 | 子智能体 | `parentId` 指向本会话的子会话；行结构与官方「子智能体」目录行一致：状态圆点 + 两行文本（主行 = spawn `label`，副行 = 会话标题 · 模式 · 活动）+ 右侧 **token 用量与耗时各占一行**（靠右、等宽数字）+ 右箭头；分区头 = 「子智能体」+ 计数 pill（= 行数总数，与下方「本轮 · n 个 + 早前 N 轮 · m 个」相加一致）；**行按委派轮次分组**：当前轮次直接摊开，早前的轮次折成一行「早前 N 轮 · m 个」（点开才逐轮列出，组头标「第 n 轮」），只有一轮时不摆任何分组头。`agentTeam` 的队友**不再单独成行**——队友本身就是一条子会话，上面那行已经把它连同 token / 耗时 / 点击入口一起列出来了；只有队友还没有对应会话行时（刚 `provisioning`）才用成员行兜底（主行 teammate 名、副行阶段，无计量与箭头） | 点子智能体行 → 与官方同一通道 `ctx.uiWorkspace.openSession({ parentSessionId, childSessionId, mode })` 切到该子会话；兜底的队友行不可点 |
+| 后台任务 | 本会话里 Agent 放到后台跑的作业，结构与宿主自己的「后台任务」面板一致：状态圆点 + `bash` 类型 pill + 等宽命令 + 结算原因（`exit code: 0`）/ 运行中的 `2/10` 进度 + 右端时长（`54秒` / `1分24秒`）。**运行中的常显**（整行铺一层淡底），**已结束的折成一行「已结束 N」**，组头右侧有「清空」 | 每颗运行中的行右端有一颗 **20×20 方形停止按钮**，两段确认（点一下 → 按钮变红框「确认停止」→ 再点才发，3 秒不动自己复位），与宿主面板一致；其余只读。**清空只在本页隐藏已结束行**，不动宿主记录。实时输出仍去宿主面板看 |
 
 - **何时显示**：会话页下**常驻**（只要有主会话就渲染）。有内容时渲染对应区块；全空时 body 显示一行
   「暂无任务与变更」，不整卡消失。耗时条**本身也算内容**——只要这一轮有事件，卡片就可见。
@@ -74,6 +75,7 @@
 | 会话 / 项目名 / 子代理 | 座位 props 的 `useSessions`（`sessions` 投影） | 主会话 = `retainedBy.mainView > 0` 的那一代 |
 | 任务 / 目标 / 队友 | `SessionSummary.projectionValues[key]` | 官方已折叠的投影值，客户端只读；缺失即整块不渲染 |
 | 子智能体的委派轮次 | 同一条路由返回的 `subagentTurns: { [childId]: turn }` | Host 扫日志时遇到 `subagent/catalog` 就记下它当时的轮次；客户端据此把「整会话的子会话目录」按轮分组，拿不到归属的行一律算当前轮（不额外造组） |
+| 后台任务 | `ctx.jobs`——`@deepseek-ai/dsh-api-job-controller` 的客户端服务，`ctx.inject(['jobs'], …)` 惰性获取：`state`（`getSnapshot()` / `subscribe`）读本会话的行、`watchRows(sessionId)` 管订阅生命周期、`kill(sessionId, jobId)` 接到停止按钮上 | 行就是宿主的 `JobView`（`id / kind / label / status / progress / detail / startedAt / finishedAt / output`）；活行 = `running` / `stopping`；排序照宿主面板（活行按开始时间升序在前，已结束按结束时间降序）；服务缺席时整块不渲染 |
 | 变更文件 | 本插件 Host 路由 `GET /api/status-card.changes?sessionId=…`（客户端以文档相对 `api/…` 请求） | 见「实现要点」 |
 | 已提交计划 | 同一条路由返回的 `plans: [{ callId, title, seq }]` | plan 模式**不落盘任何文件**，正文只存在于 `exit_plan_mode` 工具参数里；Host 侧从会话日志现扫出索引，客户端才拿得到 `callId` |
 | 目标操作 | `ctx.remote.goals.edit / pause / resume / clear`（`ctx.inject(['remote','remote.goals'], …)` 惰性获取） | 与官方目标条同一条 Host Remote；入参为 `{ id, revision }` CAS 引用 |
@@ -153,7 +155,7 @@
   `F9` 现在同时钉住 `align-items` 与三个中心点重合）。圆钮在 `.sc_card` **之外**，取不到卡片上的局部变量（`--sc-line` / `--sc-fg-strong`），
   颜色必须直接用 `--dsw-*` 全局 token——否则 `border:1px solid var(--sc-line)` 会因变量缺失在计算时失效、
   描边直接消失（真机踩过）。
-- **分区顺序固定**：耗时条 → 计划 → 目标 → 任务 → 变更 → 子智能体（`F14` 守着这个顺序，调序要同步用例）。
+- **分区顺序固定**：耗时条 → 计划 → 目标 → 任务 → 变更 → 子智能体 → 后台任务（`F14` 守着这个顺序，调序要同步用例）。
 - **分区头只有一处定义**：`SectionHead({ title, badge, tail })` 统一渲染
   「15px 加粗标题 + 可选计数 pill（`.sc_countPill`）+ 右侧尾槽（`.sc_secTail`）」，
   各块只往里塞 `badge`/`tail`，不再各写一套头部 flex。分区头**不放前置图标**（用户要求去掉，
@@ -282,8 +284,8 @@ dsh plugin --profile web add github:liuhusk/dsh-status-card
 | [icon.svg](icon.svg) | 插件卡片图标：右上角浮起的小卡片 |
 | [screenshots.json](screenshots.json) | 插件市场读取的截图清单 |
 | [docs/VERIFICATION.md](docs/VERIFICATION.md) | 真机验证记录：哪些核对过、哪些还没有 |
-| [test/smoke.mjs](test/smoke.mjs) | 冒烟测试 101 条，`npm test`（只读源码，不写任何文件） |
-| [test/mutate.mjs](test/mutate.mjs) | 变异测试 103 条，证明冒烟断言非恒真，`npm run test:mutate`（副本写系统临时目录） |
+| [test/smoke.mjs](test/smoke.mjs) | 冒烟测试 103 条，`npm test`（只读源码，不写任何文件） |
+| [test/mutate.mjs](test/mutate.mjs) | 变异测试 103 条，证明冒烟断言非恒真，`npm run test:mutate`（每条变异只重跑它该弄坏的那几条用例、8 条并发，整轮约 6 秒） |
 
 ## 验证状态
 
@@ -295,13 +297,14 @@ dsh plugin --profile web add github:liuhusk/dsh-status-card
 - **静态校验**：`node --check` 两个半边、`package.json` / locale JSON 可解析、locale 键集 zh/en 逐字对齐、
   `cordis.patch.yml` 与 manifest 引用路径齐备、`client.js` 无顶层 `export`（Client 半边由
   `window.__ModuleLoader__` 加载）。
-- **冒烟测试 101/101**：座位注册契约（`inject` 数组 / `shell.overlay` / order 50 / locale 命名空间 / 样式注入）、
-  样式无颜色字面量且含隐藏官方任务面板的选择器、两道闸门与推让几何、任务 / 目标 / 计划 / 变更 / 子智能体
-  五个区块、耗时行三段互不重叠、Host 半边日志扫描与路由口径，全部用 stub `__ModuleLoader__` + React
+- **冒烟测试 103/103**：座位注册契约（`inject` 数组 / `shell.overlay` / order 50 / locale 命名空间 / 样式注入）、
+  样式无颜色字面量且含隐藏官方任务面板的选择器、两道闸门与推让几何、任务 / 目标 / 计划 / 变更 / 子智能体 / 后台任务
+  六个区块、耗时行三段互不重叠、Host 半边日志扫描与路由口径，全部用 stub `__ModuleLoader__` + React
   钩子垫片在组件级断言。
-- **变异测试 103/103**：每条变异都要求指定用例由 PASS 转 FAIL，证明冒烟断言不是恒真。
-- **版式与色阶**（真机，浅色主题）：卡片 372px、`data-sc-block` 顺序为耗时条 → 计划 → 目标 → 任务 → 变更 →
-  子智能体、区块间 1px 线 + 12px 间距、三档色阶与增删数字的实测色值、耗时行无底色且与分区标题同左缘。
+- **变异测试 103/103**：每条变异都要求指定用例由 PASS 转 FAIL，证明冒烟断言不是恒真。`smoke.mjs` 支持
+  `SC_ONLY=<用例 id>[,<用例 id>]` 只跑指定用例，变异脚本据此把每条变异缩到「只跑它会弄坏的那几条」，
+  再用 8 条并发池跑（整轮 ~6 秒；对照组仍全量跑）。
+- **版式与色阶**（真机，浅色主题）：卡片 372px、`data-sc-block` 顺序为耗时条 → 计划 → 目标 → 任务 → 变更 → 子智能体 → 后台任务、区块间 1px 线 + 12px 间距、三档色阶与增删数字的实测色值、耗时行无底色且与分区标题同左缘。
 - **折叠与伸缩动画**（真机）：卡片与圆钮两态同心（三态中心换算成页面坐标后重合）、190ms 后卡片
   `visibility:hidden`、`prefers-reduced-motion` 下直接切换。
 - **会话区自适应**（真机，逐档视口 2100 / 1800 / 1600 / 1560）：不推让 → 推让生效且正文列宽不变 →
@@ -321,6 +324,8 @@ dsh plugin --profile web add github:liuhusk/dsh-status-card
   （按设计原样显示 Host 错误码）。
 - 文件类型图标只在真机上肉眼看过 markdown / javascript / json 三种，其余语言的配色与标记只有冒烟断言。
 - 暗色主题下的整卡版式、右栏开合时的跟随平滑度，以及点文件行是否确实切到官方「变更审查」标签的对应文件。
+- 后台任务的**真机两段停止**没有点过：`ctx.jobs.kill` 的成功 / 失败 / 三个 `data-kill-state` 过渡都由冒烟
+  用例（`F21`）用假服务覆盖；真机上只核对了运行中行的排版、每秒跳动的时长、已结束行的折叠与「清空」。
 
 详细记录见 [docs/VERIFICATION.md](docs/VERIFICATION.md)。
 
@@ -382,8 +387,8 @@ dsh plugin --profile web add github:liuhusk/dsh-status-card
 ## 开发
 
 ```bash
-npm test            # 冒烟 101 条（只读源码，不写任何文件）
-npm run test:mutate # 变异 103 条：每条都必须让指定断言由 PASS 转 FAIL
+npm test            # 冒烟 103 条（只读源码，不写任何文件）
+npm run test:mutate # 变异 103 条：每条都必须让指定断言由 PASS 转 FAIL（并发跑，约 6 秒）
 ```
 
 纯 ESM JavaScript，零构建、零依赖，Node 22 及以上够用。真机核对过什么、没核对什么见

@@ -383,6 +383,36 @@ window.__ModuleLoader__.load({
       '.sc_themeDot{flex:none;width:12px;height:12px;border-radius:999px;background:var(--sc-theme)}',
       // 选中态的色点外再套一圈卡底色 + 一圈主题色：不是只靠底色深浅辨认。
       '.sc_themeChip[aria-pressed=true] .sc_themeDot{box-shadow:0 0 0 2px var(--dsw-alias-bg-base),0 0 0 3px var(--sc-theme)}',
+      // 后台任务：行结构、分组头与「停止」按钮都照宿主「后台任务」面板的度量来
+      // （圆点 + 类型标签 + 等宽命令 + 状态/进度 + 时长，行首 20×20 见方的小按钮）。
+      '.sc_jobLine{align-items:center;gap:6px;display:flex}',
+      // 运行中的行铺一层淡底：官方面板靠这层 fill 把「还在跑」的行从已结束的行里拎出来。
+      '.sc_jobLine[data-live=true]{border-radius:var(--dsw-radius-md);background:var(--dsw-alias-interactive-bg-hover);padding:4px 8px 4px 2px}',
+      '.sc_jobRow{box-sizing:border-box;min-width:0;flex:1;align-items:center;gap:6px;padding:4px 7px;font-size:12px;line-height:17px;display:flex}',
+      '.sc_jobRow[data-settled=true]{color:var(--sc-fg-weak);min-height:28px}',
+      '.sc_jobMain{flex-direction:column;flex:1;gap:2px;min-width:0;display:flex}',
+      '.sc_jobPrimary{align-items:baseline;gap:8px;min-width:0;display:flex}',
+      '.sc_jobSecondary{align-items:center;gap:6px;min-width:0;display:flex}',
+      '.sc_jobKind{border-radius:var(--dsw-radius-xs);background:var(--sc-surface);color:var(--sc-fg);flex:none;padding:0 5px;font-size:10px;line-height:16px}',
+      '.sc_jobLabel{min-width:0;font-family:var(--dsw-font-mono);white-space:nowrap;text-overflow:ellipsis;flex:1;overflow:hidden}',
+      // 卡片比宿主那个 500px 的浮层窄得多：状态/结算原因让到 40%，把宽度留给命令本身。
+      '.sc_jobStatus{max-width:40%;color:var(--sc-fg-weak);white-space:nowrap;text-overflow:ellipsis;flex:none;font-size:10px;line-height:16px;overflow:hidden}',
+      '.sc_jobDuration{color:var(--sc-fg-weak);font-variant-numeric:tabular-nums;flex:none;font-size:11px;line-height:18px}',
+      // 「停止」：官方面板是一颗 20×20 的方形描边按钮（内含实心方块）；第一次点击只上膛，
+      // 展开成「确认停止」的胶囊，再点才真的发 kill。
+      '.sc_stop{box-sizing:border-box;flex:none;border:.5px solid var(--sc-line);border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-bg-base);width:20px;height:20px;color:var(--sc-fg);cursor:pointer;font-family:inherit;justify-content:center;align-self:center;align-items:center;gap:4px;padding:0;display:inline-flex}',
+      '.sc_stop:hover,.sc_stop:focus-visible,.sc_stop[data-kill-state=armed],.sc_stop[data-kill-state=failed]{border-color:color-mix(in srgb,var(--dsw-alias-state-error-primary) 45%,transparent);color:var(--dsw-alias-state-error-primary)}',
+      '.sc_stop:hover,.sc_stop:focus-visible{outline:none}',
+      '.sc_stop[data-kill-state=armed]{background:color-mix(in srgb,var(--dsw-alias-state-error-primary) 12%,transparent);width:auto;padding:0 7px}',
+      '.sc_stop[data-kill-state=pending]{cursor:default;opacity:.6}',
+      '.sc_stopLabel{white-space:nowrap;font-size:11px;line-height:18px}',
+      // 「已结束 N」分组头：上边一条分隔线、左边折叠开关、右边「清空」——与官方面板同构。
+      '.sc_jobSection{border-top:.5px solid var(--sc-line);color:var(--sc-fg-weak);justify-content:space-between;align-items:center;margin:4px 0 1px;padding:4px 0 3px;font-size:11px;line-height:16px;display:flex}',
+      '.sc_jobToggle,.sc_jobClear{border-radius:var(--dsw-radius-sm);color:var(--sc-fg-weak);cursor:pointer;background:0 0;border:0;align-items:center;gap:3px;padding:2px 4px;font-size:11px;line-height:16px;font-family:inherit;display:inline-flex}',
+      '.sc_jobToggle:hover,.sc_jobToggle:focus-visible,.sc_jobClear:hover,.sc_jobClear:focus-visible{background:var(--dsw-alias-interactive-bg-hover);color:var(--sc-fg-strong);outline:none}',
+      // 折叠箭头：闭上指右（-90°），展开时转正——与官方面板的分组箭头同一个动画。
+      '.sc_jobChevron{transition:transform .12s;transform:rotate(-90deg)}',
+      '.sc_jobChevron[data-open=true]{transform:none}',
     ].join('');
 
     /** 简体中文（键集基准）。 */
@@ -462,6 +492,25 @@ window.__ModuleLoader__.load({
       'agents.round.n': '第 {round} 轮',
       'agents.round.meta': '{label} · {count} 个',
       'agents.earlier': '早前 {rounds} 轮 · {count} 个',
+      'jobs.title': '后台任务',
+      'jobs.badge': '{count} 个后台任务运行中',
+      'jobs.settled': '已结束 {count}',
+      'jobs.clear': '清空',
+      // 状态词与时长文案跟宿主「后台任务」面板逐字一致：两处指向同一件事，措辞不该分叉。
+      'jobs.status.running': '运行中',
+      'jobs.status.stopping': '正在停止',
+      'jobs.status.completed': '已完成',
+      'jobs.status.killed': '已取消',
+      'jobs.status.failed': '已失败',
+      'jobs.duration.seconds': '{seconds}秒',
+      'jobs.duration.minutes': '{minutes}分{seconds}秒',
+      'jobs.duration.hours': '{hours}小时{minutes}分',
+      'jobs.duration.live': '已运行 {duration}',
+      'jobs.duration.done': '耗时 {duration}',
+      'jobs.stopTitle': '停止任务 {label}',
+      'jobs.stopConfirm': '再次点击确认停止',
+      'jobs.stopAction': '确认停止',
+      'jobs.stopFailed': '停止失败',
       'timing.total': '本轮',
       'timing.model': '模型',
       'timing.tool': '工具',
@@ -545,6 +594,24 @@ window.__ModuleLoader__.load({
       'agents.round.n': 'Turn {round}',
       'agents.round.meta': '{label} · {count}',
       'agents.earlier': 'Earlier turns ({rounds}) · {count}',
+      'jobs.title': 'Background jobs',
+      'jobs.badge': '{count} background jobs running',
+      'jobs.settled': '{count} finished',
+      'jobs.clear': 'Clear',
+      'jobs.status.running': 'running',
+      'jobs.status.stopping': 'stopping',
+      'jobs.status.completed': 'completed',
+      'jobs.status.killed': 'cancelled',
+      'jobs.status.failed': 'failed',
+      'jobs.duration.seconds': '{seconds}s',
+      'jobs.duration.minutes': '{minutes}m {seconds}s',
+      'jobs.duration.hours': '{hours}h {minutes}m',
+      'jobs.duration.live': 'Running for {duration}',
+      'jobs.duration.done': 'Took {duration}',
+      'jobs.stopTitle': 'Stop task {label}',
+      'jobs.stopConfirm': 'Click again to confirm',
+      'jobs.stopAction': 'Confirm stop',
+      'jobs.stopFailed': 'Stop failed',
       'timing.total': 'Turn',
       'timing.model': 'Model',
       'timing.tool': 'Tools',
@@ -933,6 +1000,65 @@ window.__ModuleLoader__.load({
     }
 
     /**
+     * 订阅一个惰性服务槽的当前值。
+     *
+     * 与 `useTheme` 同一个理由不用 `useSyncExternalStore`：测试里的 React 替身只实现了
+     * `useState` / `useEffect`，用最朴素的两件套既够用，也让替身能跑通整条链。
+     * @param slot `createServiceSlot()` 的返回值
+     */
+    function useServiceValue(slot) {
+      const [value, setValue] = React.useState(() => slot.get());
+      React.useEffect(() => {
+        setValue(slot.get());
+        return slot.subscribe(() => setValue(slot.get()));
+      }, [slot]);
+      return value;
+    }
+
+    /** 两版行表是否「看着一样」（比较每个行对象的引用，避免每次快照都重渲染整卡）。 */
+    function sameRows(a, b) {
+      if (a === b) return true;
+      if (a.length !== b.length) return false;
+      return a.every((row, i) => row === b[i]);
+    }
+
+    /**
+     * 后台任务行表：订阅官方 `ctx.jobs` 的客户端 model，并为本会话开一条 roster 流
+     * （`watchRows`，返回 disposer）。
+     *
+     * 服务缺席（没装 job controller，或那一行被禁用）时恒返回空表——这一节是加菜，
+     * 不能因为后台任务服务不在就把整张卡片连坐。
+     * @param jobs `ctx.jobs` 服务（惰性槽里可能还是 undefined）
+     * @param sessionId 主会话 id
+     */
+    function useJobsRows(jobs, sessionId) {
+      /** 读当前快照里的本会话行（服务或会话缺席时给稳定空表）。 */
+      const readNow = () => {
+        if (jobs === undefined || jobs === null || sessionId === undefined) return NO_ROWS;
+        return jobs.state.getSnapshot().rows[String(sessionId)] ?? NO_ROWS;
+      };
+      const [rows, setRows] = React.useState(readNow);
+      React.useEffect(() => {
+        const read = () => (jobs === undefined || jobs === null || sessionId === undefined
+          ? NO_ROWS
+          : jobs.state.getSnapshot().rows[String(sessionId)] ?? NO_ROWS);
+        const sync = () => setRows((prev) => {
+          const next = read();
+          return sameRows(prev, next) ? prev : next;
+        });
+        sync();
+        if (jobs === undefined || jobs === null || sessionId === undefined) return undefined;
+        const unsubscribe = jobs.state.subscribe(sync);
+        const unwatch = jobs.watchRows(String(sessionId));
+        return () => {
+          unwatch();
+          unsubscribe();
+        };
+      }, [jobs, sessionId]);
+      return rows;
+    }
+
+    /**
      * 主内容区元素：先同步试一次，之后在 DOM 变化时复查（会话首帧、面板重挂都能追上）。
      * 复查只在当前元素缺失或已断开时做一次选择器查询，其余情况只做一次 isConnected 判断。
      */
@@ -1212,6 +1338,8 @@ window.__ModuleLoader__.load({
       agents: ['M8 7.7a2.3 2.3 0 1 0 0-4.6 2.3 2.3 0 0 0 0 4.6z', 'M3.4 14c0-2.3 2-3.8 4.6-3.8s4.6 1.5 4.6 3.8'],
       subagent: ['M4.7 3.4v9.2', 'M11.3 6.6v1a2.4 2.4 0 0 1-2.4 2.4H7.1', 'M4.7 3.4h3.4'],
       chevronDown: ['M4.2 6.4L8 10.2l3.8-3.8'],
+      // 实心方块（按 filled 渲染）：宿主「后台任务」面板的停止按钮就是这颗 10px 的方块。
+      stop: ['M4.6 4.6h6.8v6.8H4.6z'],
       chevronRight: ['M6.4 4.2l3.8 3.8-3.8 3.8'],
       chevronLeft: ['M9.6 4.2L5.8 8l3.8 3.8'],
       refresh: ['M12.9 8a4.9 4.9 0 1 1-1.5-3.6', 'M13.1 2.8v3.1H10'],
@@ -1444,6 +1572,55 @@ window.__ModuleLoader__.load({
       if (hours > 0) return `${hours}h${String(minutes).padStart(2, '0')}m`;
       if (minutes > 0) return `${minutes}m${String(seconds).padStart(2, '0')}s`;
       return `${seconds}s`;
+    }
+
+    /** 后台任务是否「还在跑」：stopping 也算——任务没结算，行就不该滑到已结束那堆里。 */
+    function jobIsLive(job) {
+      return job?.status === 'running' || job?.status === 'stopping';
+    }
+
+    /** 后台任务行序：运行中的按启动时间正序在前，已结束的按结束时间倒序在后（与官方面板一致）。 */
+    function jobOrder(rows) {
+      return [...rows].sort((left, right) => {
+        const liveLeft = jobIsLive(left);
+        if (liveLeft !== jobIsLive(right)) return liveLeft ? -1 : 1;
+        if (liveLeft) return clockOf(left.startedAt) - clockOf(right.startedAt);
+        const gap = clockOf(right.finishedAt ?? right.startedAt) - clockOf(left.finishedAt ?? left.startedAt);
+        return gap !== 0 ? gap : clockOf(left.startedAt) - clockOf(right.startedAt);
+      });
+    }
+
+    /** 后台任务状态 → 圆点语义（复用状态条的 running 转圈与 done / warn / error 三档）。 */
+    function jobMark(status) {
+      if (status === 'running' || status === 'stopping') return 'running';
+      if (status === 'completed') return 'done';
+      if (status === 'killed') return 'warn';
+      return 'error';
+    }
+
+    /** 后台任务状态 → 文案键；未知状态按「已完成」兜底，不把英文枚举直接甩到界面上。 */
+    function jobStatusKey(status) {
+      if (status === 'running') return 'jobs.status.running';
+      if (status === 'stopping') return 'jobs.status.stopping';
+      if (status === 'killed') return 'jobs.status.killed';
+      if (status === 'failed') return 'jobs.status.failed';
+      return 'jobs.status.completed';
+    }
+
+    /**
+     * 后台任务时长：最多两档（秒 / 分秒 / 时分），文案与宿主「后台任务」面板逐字一致
+     * ——两处指向同一件事，措辞与取舍（超过一小时就不再往下补天数）不该分叉。
+     * @param t 翻译函数
+     * @param ms 毫秒
+     */
+    function jobDuration(t, ms) {
+      const total = Math.max(0, Math.floor(clockOf(ms) / 1000));
+      const seconds = total % 60;
+      const minutes = Math.floor(total / 60) % 60;
+      const hours = Math.floor(total / 3600);
+      if (hours > 0) return t('jobs.duration.hours', { hours, minutes });
+      if (minutes > 0) return t('jobs.duration.minutes', { minutes, seconds });
+      return t('jobs.duration.seconds', { seconds });
     }
 
     /**
@@ -2038,6 +2215,186 @@ window.__ModuleLoader__.load({
     }
 
     /**
+     * 后台任务块：读官方 `ctx.jobs` 的同一份客户端投影（与标题栏那个后台任务面板同源），
+     * 只做「看 + 终止」——输出面板留在官方面板里，卡片不再造一个终端。
+     *
+     * 形状沿用任务块：分区头 + 行表。运行中的行常显（圆点 / 命令 / 进度 / 时长 / 终止），
+     * 已结束的折在「已结束 N」后面，点开才铺开——后台任务不该把卡片撑得比计划还长。
+     * @param props.jobs `ctx.jobs` 服务（惰性注入，可能暂时缺省）
+     * @param props.sessionId 主会话 id
+     * @param props.rows 本会话的后台任务行（由卡片主体用 `useJobsRows` 订阅）
+     */
+    function JobsBlock({ t, sessionId, jobs, rows }) {
+      const [settledOpen, setSettledOpen] = React.useState(undefined);
+      const [clearedKeys, setClearedKeys] = React.useState(() => new Set());
+      const [kill, setKill] = React.useState(null);
+      const [now, setNow] = React.useState(() => Date.now());
+      const liveRows = rows.filter(jobIsLive);
+      // 运行中的时长得自己走：卡片整体不挂定时器，只有这一节在真有活任务时开一秒一跳。
+      React.useEffect(() => {
+        if (liveRows.length === 0) return undefined;
+        setNow(Date.now());
+        const timer = setInterval(() => setNow(Date.now()), 1000);
+        return () => clearInterval(timer);
+      }, [liveRows.length]);
+      // 两段确认的节奏照宿主后台任务面板：上膛 3 秒不点就退回，失败提示 4 秒后清掉。
+      React.useEffect(() => {
+        if (kill === null) return undefined;
+        const timer = setTimeout(() => setKill(null), kill.phase === 'armed' ? 3000 : 4000);
+        return () => clearTimeout(timer);
+      }, [kill]);
+      if (jobs === undefined || jobs === null || rows.length === 0) return null;
+
+      const ordered = jobOrder(rows);
+      const liveShown = ordered.filter(jobIsLive);
+      // 「清空」只清这张卡的表（官方面板同样只在本地把行藏起来，不动宿主那边已结束的记录）。
+      const settledRows = ordered.filter((job) => !jobIsLive(job) && !clearedKeys.has(String(job.id)));
+      // 没有活任务时默认摊开已结束的：那一屏本来就只有它们。
+      const settledExpanded = settledOpen ?? liveShown.length === 0;
+      if (liveShown.length + settledRows.length === 0) return null;
+
+      /** 停止：第一下只上膛，第二下才发 `job.kill`；失败则按钮变红，允许再点一次。 */
+      const pressStop = (key) => {
+        const armed = kill !== null && kill.key === key && kill.phase === 'armed';
+        if (!armed) {
+          setKill({ key, phase: 'armed' });
+          return;
+        }
+        setKill({ key, phase: 'pending' });
+        const settle = (ok) => setKill((current) => (current !== null && current.key === key && current.phase === 'pending'
+          ? (ok ? null : { key, phase: 'failed' })
+          : current));
+        Promise.resolve(jobs.kill(sessionId, key)).then((result) => settle(result?.ok === true)).catch(() => settle(false));
+      };
+
+      const clearSettled = () => {
+        setClearedKeys((current) => {
+          const next = new Set(current);
+          for (const job of settledRows) next.add(String(job.id));
+          return next;
+        });
+      };
+
+      /**
+       * 一行后台任务，结构与宿主面板同构：
+       * 运行中 = 圆点 + （命令 / 类型·进度·时长 两行）+ 方形停止按钮，整行铺一层淡底；
+       * 已结束 = 圆点 + 类型 + 命令 + 结算原因 + 时长，整行压成一行弱色。
+       */
+      const renderJob = (job) => {
+        const key = String(job.id);
+        const live = jobIsLive(job);
+        const label = typeof job.label === 'string' && job.label !== '' ? job.label : String(job.kind ?? '');
+        const kind = typeof job.kind === 'string' && job.kind !== '' ? job.kind : null;
+        const elapsed = live
+          ? now - clockOf(job.startedAt)
+          : clockOf(job.finishedAt ?? job.startedAt) - clockOf(job.startedAt);
+        const duration = clockOf(elapsed) === 0 ? null : jobDuration(t, elapsed);
+        // 与宿主面板同一取舍：运行中优先显示进度（`3/10`），已结束优先显示结算原因（`exit code: 3`）；
+        // 都没有才落回状态词——圆点已经说了一遍状态，这一格要放圆点说不出的信息。
+        const note = live
+          ? (typeof job.progress === 'string' && job.progress !== '' ? job.progress : null)
+          : (typeof job.detail === 'string' && job.detail !== '' ? job.detail : t(jobStatusKey(job.status)));
+        const durationCell = duration === null ? null : h('span', {
+          key: 'duration',
+          className: 'sc_jobDuration',
+          title: t(live ? 'jobs.duration.live' : 'jobs.duration.done', { duration }),
+        }, duration);
+        const dot = h('span', { key: 'dot', className: 'sc_mark', 'data-state': jobMark(job.status) });
+        const kindPill = kind === null ? null : h('span', { key: 'kind', className: 'sc_jobKind' }, kind);
+        if (!live) {
+          return h('li', { key: `job-${key}`, className: 'sc_jobLine' }, h('span', {
+            className: 'sc_jobRow',
+            'data-settled': 'true',
+            title: note ?? undefined,
+          }, [
+            dot,
+            kindPill,
+            h('span', { key: 'label', className: 'sc_jobLabel', title: label }, label),
+            note === null ? null : h('span', { key: 'note', className: 'sc_jobStatus' }, note),
+            durationCell,
+          ]));
+        }
+        const phase = kill !== null && kill.key === key ? kill.phase : null;
+        const stopTitle = phase === 'armed'
+          ? t('jobs.stopConfirm')
+          : phase === 'failed' ? t('jobs.stopFailed') : t('jobs.stopTitle', { label });
+        return h('li', { key: `job-${key}`, className: 'sc_jobLine', 'data-live': 'true' }, [
+          h('span', { key: 'row', className: 'sc_jobRow' }, [
+            dot,
+            h('span', { key: 'main', className: 'sc_jobMain' }, [
+              h('span', { key: 'primary', className: 'sc_jobPrimary' },
+                h('span', { key: 'label', className: 'sc_jobLabel', title: label }, label)),
+              h('span', {
+                key: 'secondary',
+                className: 'sc_jobSecondary',
+                title: note ?? t(jobStatusKey(job.status)),
+              }, [
+                kindPill,
+                note === null ? null : h('span', { key: 'note', className: 'sc_jobStatus' }, note),
+                durationCell,
+              ]),
+            ]),
+          ]),
+          h('button', {
+            key: 'stop',
+            type: 'button',
+            className: 'sc_stop',
+            'data-sc-action': 'stop-job',
+            'data-kill-state': phase ?? 'idle',
+            disabled: phase === 'pending',
+            title: stopTitle,
+            'aria-label': stopTitle,
+            onClick: () => pressStop(key),
+          }, [
+            h(Icon, { key: 'glyph', name: 'stop', size: 10, filled: true }),
+            phase === 'armed' ? h('span', { key: 'label', className: 'sc_stopLabel' }, t('jobs.stopAction')) : null,
+          ]),
+        ]);
+      };
+
+      const shownSettled = settledExpanded ? settledRows.slice(0, ROW_HARD_CAP) : [];
+      return h('section', { className: 'sc_block', 'data-sc-block': 'jobs' }, [
+        h(SectionHead, {
+          key: 'head',
+          title: t('jobs.title'),
+          // 运行中几条用弱色尾巴说（宿主面板的入口也是同一句），不占一颗计数 pill。
+          tail: liveShown.length > 0
+            ? h('span', { key: 'live', className: 'sc_note' }, t('jobs.badge', { count: liveShown.length }))
+            : null,
+        }),
+        liveShown.length === 0 ? null : h('ul', { key: 'live', className: 'sc_rows' }, liveShown.map(renderJob)),
+        // 分组头照宿主面板：左边是折叠开关（箭头闭上指右），右边「清空」。
+        settledRows.length === 0 ? null : h('div', { key: 'settled', className: 'sc_jobSection' }, [
+          h('button', {
+            key: 'toggle',
+            type: 'button',
+            className: 'sc_jobToggle',
+            'data-sc-action': 'toggle-settled-jobs',
+            'aria-expanded': settledExpanded,
+            onClick: () => setSettledOpen(!settledExpanded),
+          }, [
+            h('span', { key: 'chevron', className: 'sc_jobChevron', 'data-open': settledExpanded ? 'true' : 'false' },
+              h(Icon, { name: 'chevronDown', size: 12 })),
+            h('span', { key: 'text' }, t('jobs.settled', { count: settledRows.length })),
+          ]),
+          h('button', {
+            key: 'clear',
+            type: 'button',
+            className: 'sc_jobClear',
+            'data-sc-action': 'clear-settled-jobs',
+            onClick: clearSettled,
+          }, t('jobs.clear')),
+        ]),
+        shownSettled.length === 0
+          ? null
+          : h('ul', { key: 'settledRows', className: 'sc_rows' }, shownSettled.map(renderJob)),
+        settledExpanded && settledRows.length > ROW_HARD_CAP
+          ? h('div', { key: 'overflow', className: 'sc_note' }, t('list.overflow', { rest: settledRows.length - ROW_HARD_CAP }))
+          : null,
+      ]);
+    }
+
+    /**
      * 子智能体与队友块：与官方子智能体目录行同构的成员卡。
      *
      * 整会话的子会话目录会随委派轮次越攒越多，所以这里按轮次分组：当前轮次直接摊开，
@@ -2152,8 +2509,32 @@ window.__ModuleLoader__.load({
     // #endregion
 
     /**
+     * 惰性服务槽：`apply` 里的 `ctx.inject(['jobs'])` 可能在卡片已挂载之后才到位，
+     * 而普通对象赋值不会触发重渲染——槽把「服务到了」这件事推给已订阅的组件。
+     * @returns `{ get, set, subscribe }`，可直接喂 `React.useSyncExternalStore`。
+     */
+    function createServiceSlot() {
+      let value;
+      const listeners = new Set();
+      return {
+        get: () => value,
+        set(next) {
+          if (value === next) return;
+          value = next;
+          for (const listener of listeners) listener();
+        },
+        subscribe(listener) {
+          listeners.add(listener);
+          return () => {
+            listeners.delete(listener);
+          };
+        },
+      };
+    }
+
+    /**
      * 构造座位组件（闭包持有可选服务槽，用于调用官方右栏与目标通道）。
-     * @param services 可选服务槽：`{ sidebarRight?, goals? }`，由 apply 里的 ctx.inject 惰性填入。
+     * @param services 可选服务槽：`{ sidebarRight?, goals?, jobsSlot? }`，由 apply 里的 ctx.inject 惰性填入。
      * @returns 卡片组件。
      */
     function createStatusCard(services) {
@@ -2177,6 +2558,11 @@ window.__ModuleLoader__.load({
         const running = useSessionStatus((snapshot) => (sessionId === undefined ? undefined : snapshot.get(sessionId)?.running));
         const statuses = useSessionStatus((snapshot) => snapshot);
         const subagents = useSessions((snapshot) => subagentRows(snapshot, sessionId, statuses), equalRows);
+        // 后台任务：服务本身走惰性槽（没装 job controller 时恒为 undefined，这一节整块不出现），
+        // 行表交给 `useJobsRows` 订阅官方 model——与标题栏那个后台任务面板同源。
+        const jobsSlot = services.jobsSlot;
+        const jobs = useServiceValue(jobsSlot);
+        const jobRows = useJobsRows(jobs, sessionId);
         // 渲染时刻用作「现在」：运行中的活跃耗时按这一瞬算，随下次渲染前移。
         const now = Date.now();
         // 主题（高亮色）：跟卡片同一份模块级状态，`data-sc-theme` 落到卡片根上，
@@ -2225,6 +2611,7 @@ window.__ModuleLoader__.load({
           || planRowList.length > 0
           || fileRows.length > 0
           || subagents.length > 0
+          || jobRows.length > 0
           || teamInfo !== null;
         // 常驻定位：只要有主会话就渲染卡片；无内容时由 body 显示空态，
         // 而不是整卡 return null（否则干净会话里卡片根本不挂载、看不到任何状态）。
@@ -2349,7 +2736,7 @@ window.__ModuleLoader__.load({
             refreshButton,
             toggleButton,
           ]),
-          // 分区顺序：状态条 → 计划 → 目标 → 任务 → 变更 → 子智能体。
+          // 分区顺序：状态条 → 计划 → 目标 → 任务 → 变更 → 子智能体 → 后台任务。
           h('div', { key: 'body', className: 'sc_body' }, hasContent ? [
             h(TimingBar, { key: 'timing', t, segments: timingRowList }),
             h(PlanBlock, {
@@ -2390,6 +2777,8 @@ window.__ModuleLoader__.load({
               now,
               onOpenSubagent: openSubagent,
             }),
+            // 后台任务排在子智能体之后：与宿主「后台任务」面板的位置一致，也符合「先人后机器」的阅读顺序。
+            h(JobsBlock, { key: 'jobs', t, sessionId, jobs, rows: jobRows }),
           ] : h('div', { key: 'empty', className: 'sc_note' }, t('card.empty'))),
         ]), fab] : null);
       };
@@ -2437,10 +2826,22 @@ window.__ModuleLoader__.load({
          * 缺任一服务整张卡片会永久停在 PENDING —— 一个纯展示卡片不该因为目标服务缺席而消失。
          * `ctx.inject(deps, cb)` 会在依赖到齐时启动子 fiber，缺席时静默不执行。
          */
-        const services = { sidebarRight: undefined, goals: undefined, sessions: ctx.sessions, uiWorkspace: undefined };
+        const services = {
+          sidebarRight: undefined,
+          goals: undefined,
+          sessions: ctx.sessions,
+          uiWorkspace: undefined,
+          // 后台任务服务走「槽」而不是普通字段：服务可能在卡片挂载后才到位，
+          // 普通赋值不会触发重渲染，槽会通知已订阅的组件。
+          jobsSlot: createServiceSlot(),
+        };
 
         ctx.inject(['sidebarRight'], (scope) => {
           services.sidebarRight = scope.sidebarRight;
+        });
+
+        ctx.inject(['jobs'], (scope) => {
+          services.jobsSlot.set(scope.jobs);
         });
 
         ctx.inject(['remote', 'remote.goals'], (scope) => {
