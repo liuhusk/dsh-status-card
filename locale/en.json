@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Status card",
+    "description": "A permanent status card at the top-right of the content area: one line of this turn's timing (model / tools / waiting), plus to-dos, goal, submitted plans, this session's changed files, and subagents. Collapse the to-do list or track its progress, edit/pause/resume/clear the goal, and click a plan or a subagent row to open the plan preview or switch to that session. It also takes over the display of the official to-do panel above the composer."
+  }
+}

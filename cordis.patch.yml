@@ -1,0 +1,10 @@
+# 本 bundle 的 Loader 补丁。
+#
+# - `id`：行 id，用短名即可，全局唯一。
+# - `name`：必须是 package.json 里的包名（新的包名见 README「改名」）。
+# - `config`：可选。只有 Host 半边导出了 Config schema 时才写，否则省略。
+#
+# 同一 id 的后续覆盖会整体替换 config，所以改动前先读原补丁。
+- insert:
+    - id: dsh-status-card
+      name: '@liuhusk/dsh-status-card'

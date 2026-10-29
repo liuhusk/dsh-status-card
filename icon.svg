@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Status card">
+  <rect x="6" y="6" width="52" height="52" rx="14" fill="#247bbf"/>
+  <rect x="12" y="14" width="40" height="36" rx="6" fill="#ffffff" opacity="0.92"/>
+  <rect x="30" y="10" width="24" height="20" rx="5" fill="#0f3f66"/>
+  <path d="M35 17h14M35 23h9" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M17 40h10M17 46h7" stroke="#247bbf" stroke-width="2.4" stroke-linecap="round"/>
+</svg>

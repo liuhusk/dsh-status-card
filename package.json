@@ -1,0 +1,60 @@
+{
+  "name": "@liuhusk/dsh-status-card",
+  "version": "0.21.1",
+  "private": true,
+  "type": "module",
+  "description": "A permanent status card in the top-right corner of the DSH content area: this turn's timing (model / tools / waiting), to-dos with progress, goal, submitted plans, changed files, and subagents.",
+  "author": "liuh",
+  "license": "MIT",
+  "icon": "./icon.svg",
+  "scripts": {
+    "test": "node test/smoke.mjs",
+    "test:mutate": "node test/mutate.mjs"
+  },
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "icon.svg",
+    "locale/*.json"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-api-session-controller",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-layout"
+      ]
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/liuhusk/dsh-status-card.git"
+  },
+  "homepage": "https://github.com/liuhusk/dsh-status-card#readme",
+  "bugs": {
+    "url": "https://github.com/liuhusk/dsh-status-card/issues"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "cordis",
+    "status-card",
+    "todos",
+    "goal",
+    "subagents"
+  ]
+}
