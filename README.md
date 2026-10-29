@@ -118,8 +118,11 @@ Requires DSH 0.2.1-rc.3 or newer (the card is built against the `shell.overlay` 
 controller of that line).
 
 ```bash
-# straight from GitHub
+# straight from GitHub (tracks main)
 dsh plugin --profile web add github:liuhusk/dsh-status-card
+
+# or pin a release tag (see Releases)
+dsh plugin --profile web add github:liuhusk/dsh-status-card#v0.22.0
 ```
 
 Or from a local checkout, through the in-app plugin manager (Creator mode / Full access):

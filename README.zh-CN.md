@@ -255,7 +255,11 @@
 直接从 GitHub 安装：
 
 ```bash
+# 跟最新 main
 dsh plugin --profile web add github:liuhusk/dsh-status-card
+
+# 或钉住某个 Release 标签（见 Releases）
+dsh plugin --profile web add github:liuhusk/dsh-status-card#v0.22.0
 ```
 
 本地 checkout 场景走应用内插件管理器（Creator 模式 + Full access）：`install_bundle`（target = 本目录
