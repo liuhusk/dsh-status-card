@@ -1892,7 +1892,7 @@ await runCase('F21 后台任务块：结构照宿主面板、运行中常显、�
   expect(findAll(cleared, (node) => hasClass(node, 'sc_jobSection')).length === 0, '没有已结束的行时不该再摆分组头');
 });
 
-await runCase('F22 后台任务服务缺席时整块不出现；只有已结束任务时默认摊开', async () => {
+await runCase('F22 后台任务服务缺席时整块不出现；只有已结束任务时也默认收起，点开才铺行', async () => {
   const { tree } = await render(richOpts());
   expect(blockOf(tree, 'jobs') === null, '没有 jobs 服务却渲染了后台任务块');
   expect(blockOf(tree, 'task'), '后端任务服务缺席时卡片其余分区仍应渲染');
@@ -1905,8 +1905,17 @@ await runCase('F22 后台任务服务缺席时整块不出现；只有已结束�
   const block = blockOf(onlySettled.tree, 'jobs');
   expect(block, '只有已结束任务时也该渲染后台任务块');
   expect(textOf(block).includes('已结束 1'), `折叠文案为 ${JSON.stringify(textOf(block))}`);
-  expect(findAll(block, (node) => hasClass(node, 'sc_jobLine')).length === 1, '没有活任务时应默认摊开已结束的行');
-  expect(actionNode(block, 'stop-job') === undefined, '已结束的行不该有停止按钮');
+  // 已结束的行一律默认收起：常驻卡片上只留一行计数，不拿历史作业占高度。
+  expect(findAll(block, (node) => hasClass(node, 'sc_jobLine')).length === 0, '已结束的行默认应收起，不该直接铺开');
+  const toggle = actionNode(block, 'toggle-settled-jobs');
+  expect(toggle, '分组头里没有折叠开关');
+  expect(toggle.props['aria-expanded'] === false, `默认应收起，实际 ${JSON.stringify(toggle.props['aria-expanded'])}`);
+  expect(findAll(toggle, (node) => hasClass(node, 'sc_jobChevron'))[0].props['data-open'] === 'false', '收起时箭头应为闭合态');
+
+  toggle.props.onClick();
+  const opened = blockOf(expand(await pump(onlySettled.env.card, onlySettled.props)), 'jobs');
+  expect(findAll(opened, (node) => hasClass(node, 'sc_jobLine')).length === 1, '点开后应铺出那条已结束的行');
+  expect(actionNode(opened, 'stop-job') === undefined, '已结束的行不该有停止按钮');
 });
 
 await runCase('F20 轮次结束后「等你」定格（路由即使带上 idleSince 也不算，对话结束不该继续涨）', async () => {

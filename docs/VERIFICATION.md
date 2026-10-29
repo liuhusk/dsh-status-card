@@ -37,7 +37,8 @@ Host used for the live checks: DSH 0.2.1-rc.3, Web UI served on `http://127.0.0.
   without writing padding, `prefers-reduced-motion` disables the transition, hysteresis dead zone
   (1300 collapsed → 1340 still collapsed → 1360 expands).
 - Background jobs, covered by `F21` / `F22` with a stubbed `jobs` service: running rows are always listed and
-  finished rows fold behind the "n finished" header (expanded by default when nothing is running), the row
+  finished rows fold behind the "n finished" header and stay collapsed even when nothing is running
+  (expanded only by a click), the row
   structure matches the host panel (dot / kind pill / mono label / settled reason / duration), the duration
   is formatted as `54秒`-style Chinese units and ticks once alive, stop is a two-step control that only calls
   `kill(sessionId, jobId)` on the second click, the three `data-kill-state` values (`idle` / `armed` /
@@ -126,8 +127,9 @@ Host used for the live checks: DSH 0.2.1-rc.3, Web UI served on `http://127.0.0.
 - Background jobs on a live page (viewport 2560, dpr 2, dark theme): the block rendered between "Changed
   files" and "Subagents" with the title "后台任务", a muted "1 个后台任务运行中" tail, one live row (a real
   `sleep 90` job: spinner dot, mono command at full 276px width, `bash` pill, duration ticking `8秒 → 13秒`,
-  a 20×20 square stop button at `data-kill-state=idle`) and the finished group (`› 已结束 4` + "清空") with
-  four settled rows showing `exit code: 0` and `54秒` / `1分24秒` / `4分9秒` / `1秒`. Measured against the
+  a 20×20 square stop button at `data-kill-state=idle`) and the finished group (`› 已结束 4` + "清空",
+  collapsed by default); opening it revealed four settled rows showing `exit code: 0` and `54秒` /
+  `1分24秒` / `4分9秒` / `1秒`. Measured against the
   host panel: same row order (live first by start time, finished by finish time), same 20×20 button size,
   same `-90deg → 0` chevron, same hairline above the group header.
 - Turn timing: after the host restart the route returns

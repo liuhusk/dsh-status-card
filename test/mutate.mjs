@@ -640,6 +640,12 @@ const MUTATIONS = [
     expectFail: ['F19'],
   },
   {
+    name: 'M104 没有活任务时又把已结束的行摊开（常驻卡片被历史作业占高度）',
+    from: 'const settledExpanded = settledOpen ?? false;',
+    to: 'const settledExpanded = settledOpen ?? liveShown.length === 0;',
+    expectFail: ['F22'],
+  },
+  {
     name: 'M103 计数 pill 只算当前轮（和「队友 N · 任务 x/y」不对应）',
     from: '          badge: groupDigits(total),',
     to: '          badge: groupDigits(currentRows.length),',

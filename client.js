@@ -2249,8 +2249,8 @@ window.__ModuleLoader__.load({
       const liveShown = ordered.filter(jobIsLive);
       // 「清空」只清这张卡的表（官方面板同样只在本地把行藏起来，不动宿主那边已结束的记录）。
       const settledRows = ordered.filter((job) => !jobIsLive(job) && !clearedKeys.has(String(job.id)));
-      // 没有活任务时默认摊开已结束的：那一屏本来就只有它们。
-      const settledExpanded = settledOpen ?? liveShown.length === 0;
+      // 已结束的一律默认收起：卡片是常驻的旁栏，历史作业只留一行计数，要看再点开。
+      const settledExpanded = settledOpen ?? false;
       if (liveShown.length + settledRows.length === 0) return null;
 
       /** 停止：第一下只上膛，第二下才发 `job.kill`；失败则按钮变红，允许再点一次。 */
