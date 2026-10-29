@@ -16,8 +16,6 @@ collapsed. **When the content area gets narrow, the card pushes the text column 
 it shrinks into a single round button and expands again when the window grows back.** It hides itself
 while you are looking at a global panel (plugins, schedules, …).
 
-`@author liuh`
-
 ## Behavior
 
 | Block | Content | Interaction |
@@ -192,4 +190,4 @@ the plugin marketplace displays):
 
 ## License
 
-[MIT](LICENSE) © 2026 liuh
+[MIT](LICENSE) © 2026 liuhusk
