@@ -271,6 +271,9 @@ function setup({
   const goalCalls = [];
   const resultOf = (call) => (typeof goalResult === 'function' ? goalResult(call) : goalResult);
   const goals = {
+    get() {
+      return Promise.resolve({ ok: true, value: { id: 'goal-1', revision: 2, activation: 'armed' } });
+    },
     edit(sessionId, ref, request) {
       const call = { kind: 'edit', sessionId, ref, request };
       goalCalls.push(call);
@@ -1876,6 +1879,12 @@ await runCase('F21 后台任务块：结构照宿主面板、运行中常显、�
   expect(env.jobWatched.includes(MAIN), `roster 流没为本会话打开，实际 ${JSON.stringify(env.jobWatched)}`);
   expect(actionNode(killed, 'stop-job').props['data-kill-state'] === 'idle', '成功后按钮应回到 idle');
 
+  // 「清空」只清这张卡的表：已结束的行消失，运行中的行照旧。
+  actionNode(killed, 'clear-settled-jobs').props.onClick();
+  const cleared = blockOf(expand(await pump(env.card, props)), 'jobs');
+  expect(findAll(cleared, (node) => hasClass(node, 'sc_jobLine')).length === 1, '清空后应只剩运行中的那一行');
+  expect(findAll(cleared, (node) => hasClass(node, 'sc_jobSection')).length === 0, '没有已结束的行时不该再摆分组头');
+
   // 服务回 ok:false：按钮进入 failed 态，不假装成功。
   const failing = await render({ projections: {}, jobsRows: [rows[0]], jobKillResult: { ok: false } });
   actionNode(blockOf(failing.tree, 'jobs'), 'stop-job').props.onClick();
@@ -1885,11 +1894,6 @@ await runCase('F21 后台任务块：结构照宿主面板、运行中常显、�
   expect(failedStop.props['data-kill-state'] === 'failed', `失败态应为 failed，实际 ${JSON.stringify(failedStop.props['data-kill-state'])}`);
   expect(failedStop.props.title === '停止失败', `失败后 title 应提示停止失败，实际 ${JSON.stringify(failedStop.props.title)}`);
 
-  // 「清空」只清这张卡的表：已结束的行消失，运行中的行照旧。
-  actionNode(opened, 'clear-settled-jobs').props.onClick();
-  const cleared = blockOf(expand(await pump(env.card, props)), 'jobs');
-  expect(findAll(cleared, (node) => hasClass(node, 'sc_jobLine')).length === 1, '清空后应只剩运行中的那一行');
-  expect(findAll(cleared, (node) => hasClass(node, 'sc_jobSection')).length === 0, '没有已结束的行时不该再摆分组头');
 });
 
 await runCase('F22 后台任务服务缺席时整块不出现；只有已结束任务时也默认收起，点开才铺行', async () => {
@@ -1996,7 +2000,7 @@ await runCase('F13 耗时条：本轮总耗时打头、细分在后，等你只�
   expect(blockOf(none.tree, 'timing') == null, '没有本轮耗时的会话里不该渲染耗时条');
 });
 
-await runCase('F14 分区顺序：状态条 → 计划 → 目标 → 任务 → 变更 → 子智能体 → 后台任务', async () => {
+await runCase('F14 分区顺序：状态条 → 计划 → 目标 → 任务 → 历史任务 → 变更 → 子智能体 → 后台任务', async () => {
   // 富 fixture 一次凑齐六个分区：todos/goal/team/permissions 走投影，计划与变更走路由响应。
   const { tree } = await render({
     ...richOpts(),
@@ -2009,6 +2013,7 @@ await runCase('F14 分区顺序：状态条 → 计划 → 目标 → 任务 →
       added: 12,
       deleted: 6,
       timing: { turn: 2, modelMs: 42000, toolMs: 18000, waitSince: null },
+      previousTodos: { turn: 1, todos: [{ content: '上轮任务', status: 'completed' }] },
       plans: [planRow('call-1', '重建状态卡片')],
     }),
   });
@@ -2016,7 +2021,11 @@ await runCase('F14 分区顺序：状态条 → 计划 → 目标 → 任务 →
   expect(body, '没有 .sc_body');
   const order = findAll(body, (node) => typeof node.props?.['data-sc-block'] === 'string')
     .map((node) => node.props['data-sc-block']);
-  const expected = ['timing', 'plan', 'goal', 'task', 'changes', 'agents', 'jobs'];
+  const expected = ['timing', 'plan', 'goal', 'task', 'previous-tasks', 'changes', 'agents', 'jobs'];
+  expect(textOf(blockOf(tree, 'task')).includes('重写冒烟测试'), '当前任务没有保留在当前任务块');
+  const previous = blockOf(tree, 'previous-tasks');
+  expect(textOf(previous).includes('历史任务 · 第 1 轮'), '历史任务未标出真实轮次');
+  expect(!textOf(previous).includes('上轮任务'), '历史任务默认应收起');
   expect(JSON.stringify(order) === JSON.stringify(expected),
     `分区顺序为 ${JSON.stringify(order)}，应为 ${JSON.stringify(expected)}`);
 });

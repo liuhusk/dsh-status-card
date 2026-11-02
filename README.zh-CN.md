@@ -24,13 +24,13 @@
 | 标题栏 | 项目名（会话 `cwd` 的目录名，悬停显示完整路径）+ 副标题（会话标题，缺省「Agent 工作区」） | 两个**宿主同款圆形按钮**（28px、1px 细描边、白底、里面 16px 图标）：`⟳` 立即重取变更、`⌄` 收起卡片 |
 | 高亮色（主题） | 卡片里所有高亮部位共用一族颜色：任务勾选环、2px 进度条、进度 pill、计划灯泡与柔光晕、状态圆点、目标动作按钮与聚焦描边。四档预设：**绿**（默认，= 改动前的观感）、**蓝**（`#4176e6`，= 改动前目标 / 计划的强调色）、**琥珀**、**红**，色值取宿主静态色阶的中调 500（明暗两种模式同值）。宿主静态色阶只有绿 / 蓝 / 靛 / 琥珀 / 红五个色相族，其中 `blue-500`(#3b82f6) 与 `deepseek-500`(#4176e6) 肉眼几乎同色，两档都摆出来等于让用户挑一个看不出差别的颜色，所以「蓝」直接用 deepseek-500、预设只留四档 | 在**插件详情页**（插件 → 本包）的「高亮色」里点色点即换色，卡片当场跟着变；选择存在浏览器本地，刷新后仍是它。「错误 / 警告」色与文件类型图标颜色**不跟主题**（语义色不该被主题带走） |
 | 折叠形态 | 折叠后**整张卡片收成一颗圆形按钮**（34px、1px 细描边、白底 + 阴影，跟宿主「回到底部」那颗同款），里面是 `<` 箭头 | 点这颗圆钮即展开卡片；**两种形态之间是伸缩动画**（卡片缩进圆钮 / 从圆钮里长出来，约 220ms，带一点回弹；圆钮就在卡片里那颗收起按钮的位置上，两态**同心重叠**，看起来是同一颗按钮在原地收放），系统开了「减少动态效果」时直接切换；折叠态不占内容区宽度；**宽度不够放卡片时它会自动收成这颗圆钮**（见下条），宽度恢复后再自动展开 |
-| 本轮耗时 | 顶栏下的一行裸文字（无底色 / 无圆角 / 无内边距，左边缘与下方各分区的行首对齐）：先给**总计** `本轮 25m32s`（标签「本轮」弱色、数值 600 `--sc-fg`），再接细分 `模型 2m44s · 工具 3m04s · 等你 1m12s`（同样 12px / 600 `--sc-fg` + 等宽数字，段间淡点）——总计只靠位置站队首，**不再单独放大一档字号**。模型 = 本轮 `step/start`→`assistant/message`，工具 = `tool/call`→`tool/result` 配对，**等你 = 人占用的时间**：`ask_user_question` 从发问到用户答完、`exit_plan_mode` 等计划批准、以及工具执行期间弹出的审批（`approval/asked`→`approval/decided`），只算**人真正卡住 agent 的时间**；这一轮交回给用户之后（`turn/end` 以后）数字随轮次**定格**，轮次之间的空闲（看回答 / 想下一步 / 离开）不计 | 只读；**三段互不重叠**（审批那段从工具耗时里扣掉），所以总计 = 三者相加且不会超过这一轮的墙钟；没有等待就不摆「等你」；这一轮没有任何记录则整条不渲染；运行中每 2 秒重取一次、等待中（`waitSince` 存在）每秒重算一次；**与下方各分区内容同宽**（左右不多缩进） |
-| 任务 | 官方 `todos` 投影：勾选圆（已完成 = **空心绿环 + 14px 绿勾**、进行中 = 整颗环转圈、其余 = 灰空圈）+ 标题旁绿色进度 pill + 下方 **2px** 进度条 | 分区头右侧 `⌄`/`›` 折叠展开（折叠后进度仍留在分组头）；超过 6 条先折后展（点「查看全部」，硬上限 200） |
-| 目标 | 官方 `goal` 投影：阶段（进行中/已暂停/受阻/已完成）、第 n 轮、目标文本、受阻原因 | 卡片内可**编辑**（同条内联 textarea，Enter 保存 / Esc 取消）、**暂停**（active）、**继续**（paused）、**清除**——走官方 `remote.goals` 同一条通道与 CAS 引用 |
+| 本轮耗时 | 顶栏下的一行裸文字（无底色 / 无圆角 / 无内边距，左边缘与下方各分区的行首对齐）：先给**总计** `本轮 25m32s`（标签「本轮」弱色、数值 600 `--sc-fg`），再接细分 `模型 2m44s · 工具 3m04s · 等你 1m12s`（同样 12px / 600 `--sc-fg` + 等宽数字，段间淡点）——总计只靠位置站队首，**不再单独放大一档字号**。模型 = 本轮 `step/start`→`assistant/message`，工具 = `tool/call`→`tool/result` 配对，**等你 = 人占用的时间**：`ask_user_question` 从发问到用户答完、`exit_plan_mode` 等计划批准、以及工具执行期间弹出的审批（`approval/asked`→`approval/decided`），只算**人真正卡住 agent 的时间**；这一轮交回给用户之后（`turn/end` 以后）数字随轮次**定格**，轮次之间的空闲（看回答 / 想下一步 / 离开）不计 | 只读；并行工具按重叠区间只计一次，重叠时按**等你 → 工具 → 模型**归属，三段互不重叠、总计不超过已过墙钟；无等待不摆「等你」，空轮不渲染。每 2 秒重取宿主采样，未结束的模型 / 工具 / 等待均每秒增长，轮次结束后定格；**与下方各分区内容同宽**（左右不多缩进） |
+| 任务 | 本轮官方 `todos` 投影：勾选圆、进度 pill 与 **2px** 进度条。另设只读历史组，保留最近一个有清单的历史轮次及其最后状态，标明真实轮次 | 当前任务保留折叠 / 查看全部（硬上限 200）；历史任务**默认收起**，点开回看，与本轮任务分开展示。历史从会话日志还原，明确清空过的清单不会复活 |
+| 目标 | 官方目标文本、阶段、轮次与受阻原因，补读宿主实时 activation；active 但 disarmed 时显示**待继续**并提供**继续** | **编辑**（Enter 保存 / Esc 取消）、**暂停**、**继续**、**清除**走官方 Remote 与 CAS。草稿与异步请求绑定会话及目标身份；切会话或换目标退出编辑，旧请求的晚返回不能污染新目标 |
 | 计划 | Host 路由带回的本会话已提交计划（`exit_plan_mode` 的标题，新的在前，最多 20 条）；行内是裸内容（**不铺底色**，与上方内容同宽；行首一颗自绘的「灯泡 + 周围闪光点」图标（强调色 + 两层 `drop-shadow` 柔光晕，不用实心）、行尾外链图标表示右栏预览；宽度撑满内容、行高紧凑（`4px` 上下内边距 + `1px` 行距）、悬停才浮出胶囊） | 点某行 → 用官方 `plan` 预览类型在右栏打开该计划正文 |
 | 本次变更 | 整会话按路径去重的文件清单（每行左侧是**彩色文件类型图标**，按扩展名分类型，**语言也各自分家**：js / ts / json / py / rs / go / java / C 系 / shell / css / 配置（yaml·toml·ini）/ sql / markdown / excel / html / image / pdf / ppt / video / word / 通用 code / other）+ `+added / -deleted` 合计；多轮改动时再按「本轮 · n 个文件」/「更早改动 · n 个文件」两段分组（本轮在前，只有一轮不出分组头） | 点某行 → 打开官方「变更审查」右栏的对应文件 |
 | 子智能体 | `parentId` 指向本会话的子会话；行结构与官方「子智能体」目录行一致：状态圆点 + 两行文本（主行 = spawn `label`，副行 = 会话标题 · 模式 · 活动）+ 右侧 **token 用量与耗时各占一行**（靠右、等宽数字）+ 右箭头；分区头 = 「子智能体」+ 计数 pill（= 行数总数，与下方「本轮 · n 个 + 早前 N 轮 · m 个」相加一致）；**行按委派轮次分组**：当前轮次直接摊开，早前的轮次折成一行「早前 N 轮 · m 个」（点开才逐轮列出，组头标「第 n 轮」），只有一轮时不摆任何分组头。`agentTeam` 的队友**不再单独成行**——队友本身就是一条子会话，上面那行已经把它连同 token / 耗时 / 点击入口一起列出来了；只有队友还没有对应会话行时（刚 `provisioning`）才用成员行兜底（主行 teammate 名、副行阶段，无计量与箭头） | 点子智能体行 → 与官方同一通道 `ctx.uiWorkspace.openSession({ parentSessionId, childSessionId, mode })` 切到该子会话；兜底的队友行不可点 |
-| 后台任务 | 本会话里 Agent 放到后台跑的作业，结构与宿主自己的「后台任务」面板一致：状态圆点 + `bash` 类型 pill + 等宽命令 + 结算原因（`exit code: 0`）/ 运行中的 `2/10` 进度 + 右端时长（`54秒` / `1分24秒`）。**运行中的常显**（整行铺一层淡底），**已结束的一律折成一行「已结束 N」（默认收起，没有活任务时也收起）**，组头右侧有「清空」 | 每颗运行中的行右端有一颗 **20×20 方形停止按钮**，两段确认（点一下 → 按钮变红框「确认停止」→ 再点才发，3 秒不动自己复位），与宿主面板一致；其余只读。**清空只在本页隐藏已结束行**，不动宿主记录。实时输出仍去宿主面板看 |
+| 后台任务 | 本会话里 Agent 放到后台跑的作业，结构与宿主自己的「后台任务」面板一致：状态圆点 + `bash` 类型 pill + 等宽命令 + 结算原因（`exit code: 0`）/ 运行中的 `2/10` 进度 + 右端时长（`54秒` / `1分24秒`）。**运行中的常显**（整行铺一层淡底），**已结束的一律折成一行「已结束 N」（默认收起，没有活任务时也收起）**，组头右侧有「清空」 | 每颗运行中的行右端有一颗 **20×20 方形停止按钮**，两段确认（点一下 → 按钮变红框「确认停止」→ 再点才发，3 秒不动自己复位），与宿主面板一致；请求发出后保持禁用直到结果返回，`stopping` 行明确显示正在停止且不能再次停止；其余只读。**清空只在本页隐藏已结束行**，不动宿主记录。实时输出仍去宿主面板看 |
 
 - **何时显示**：会话页下**常驻**（只要有主会话就渲染）。有内容时渲染对应区块；全空时 body 显示一行
   「暂无任务与变更」，不整卡消失。耗时条**本身也算内容**——只要这一轮有事件，卡片就可见。
@@ -76,9 +76,10 @@
 | 后台任务 | `ctx.jobs`——`@deepseek-ai/dsh-api-job-controller` 的客户端服务，`ctx.inject(['jobs'], …)` 惰性获取：`state`（`getSnapshot()` / `subscribe`）读本会话的行、`watchRows(sessionId)` 管订阅生命周期、`kill(sessionId, jobId)` 接到停止按钮上 | 行就是宿主的 `JobView`（`id / kind / label / status / progress / detail / startedAt / finishedAt / output`）；活行 = `running` / `stopping`；排序照宿主面板（活行按开始时间升序在前，已结束按结束时间降序）；服务缺席时整块不渲染 |
 | 变更文件 | 本插件 Host 路由 `GET /api/status-card.changes?sessionId=…`（客户端以文档相对 `api/…` 请求） | 见「实现要点」 |
 | 已提交计划 | 同一条路由返回的 `plans: [{ callId, title, seq }]` | plan 模式**不落盘任何文件**，正文只存在于 `exit_plan_mode` 工具参数里；Host 侧从会话日志现扫出索引，客户端才拿得到 `callId` |
-| 目标操作 | `ctx.remote.goals.edit / pause / resume / clear`（`ctx.inject(['remote','remote.goals'], …)` 惰性获取） | 与官方目标条同一条 Host Remote；入参为 `{ id, revision }` CAS 引用 |
+| 目标操作 / 激活状态 | `ctx.remote.goals.get / edit / pause / resume / clear` 与 `goal/activation-changed` 事件，惰性获取 | 与官方目标条同一条 Remote，操作带 `{ id, revision }` CAS；activation 不属于持久投影，单独读取并实时同步，过期读取与晚返回不能覆盖新身份 |
+| 历史任务 | 同一 Host 路由的 `previousTodos: { turn, todos }` 或 `null` | 最近一个有清单的历史轮次最后一次 `todo/write`；明确空写入保持空，不改当前官方 `todos` 投影 |
 | 正文列宽度 | 内容区元素上的 CSS 变量 `--dsh-chat-content-width`（宿主布局导出） | 宿主写的是 `clamp(…)`，`getPropertyValue` 只能拿到原样字符串，因此用一个临时探针元素落地成像素（量完即删）；解析失败一律退回 820px 保险丝 |
-| 本轮耗时 | 同一条路由返回的 `timing: { turn, modelMs, toolMs, waitMs, waitSince }` | Host 按会话事件自带的 `time`（epoch ms）折叠：模型 = `step/start`→`assistant/message`、工具 = `tool/call`→`tool/result`（按 callId 配对，`ask_user_question` 那段**不算**工具时间）、等你 = 已结算等待区间之和 `waitMs`（提问 / 计划批准 / 审批，区间存成 `[from,to]` 并合并重叠，工具耗时会把落在窗口里的审批时间扣掉），还在等人时由 `waitSince` 带出绝对起点，客户端用渲染时刻算出正在进行的这一段，所以不用重新请求也会长；`turn/end` 之后没有未结算的等待，`waitSince` 变 null、数字定格（轮次之间的空闲不算「等你」） |
+| 本轮耗时 | 同一条路由返回的 `timing: { turn, modelMs, toolMs, waitMs, waitSince, sampledAt, active }` | Host 合并区间并排他归属，三个数已包含采样时刻前的进行中耗时；客户端只给 `active` 对应的一段增加 `now - sampledAt`。`active` 为 `model` / `tool` / `wait` / `null`；轮次结束后冻结。旧 Host 没有新字段时保留旧展示口径 |
 
 ## 实现要点
 
@@ -155,7 +156,7 @@
   `F9` 现在同时钉住 `align-items` 与三个中心点重合）。圆钮在 `.sc_card` **之外**，取不到卡片上的局部变量（`--sc-line` / `--sc-fg-strong`），
   颜色必须直接用 `--dsw-*` 全局 token——否则 `border:1px solid var(--sc-line)` 会因变量缺失在计算时失效、
   描边直接消失（真机踩过）。
-- **分区顺序固定**：耗时条 → 计划 → 目标 → 任务 → 变更 → 子智能体 → 后台任务（`F14` 守着这个顺序，调序要同步用例）。
+- **分区顺序固定**：耗时条 → 计划 → 目标 → 本轮任务 → 历史任务 → 变更 → 子智能体 → 后台任务（`F14` 守着这个顺序，调序要同步用例）。
 - **分区头只有一处定义**：`SectionHead({ title, badge, tail })` 统一渲染
   「15px 加粗标题 + 可选计数 pill（`.sc_countPill`）+ 右侧尾槽（`.sc_secTail`）」，
   各块只往里塞 `badge`/`tail`，不再各写一套头部 flex。分区头**不放前置图标**（用户要求去掉，
@@ -259,12 +260,13 @@
 dsh plugin --profile web add github:liuhusk/dsh-status-card
 
 # 或钉住某个 Release 标签（见 Releases）
-dsh plugin --profile web add github:liuhusk/dsh-status-card#v0.22.0
+dsh plugin --profile web add github:liuhusk/dsh-status-card#v0.23.0
 ```
 
 本地 checkout 场景走应用内插件管理器（Creator 模式 + Full access）：`install_bundle`（target = 本目录
-绝对路径）安装，`remove_bundle`（target = `@liuhusk/dsh-status-card`）卸载。改完 Client 代码刷新页面即可；
-**替换**已安装的同名包需要重启宿主才能加载新的 JS 模块代际。
+绝对路径）安装，`remove_bundle`（target = `@liuhusk/dsh-status-card`）卸载。本次同时更新了 Client 与 Host 的耗时 / 历史扫描。
+通过插件管理器升级后查看结果：`applied` 时刷新页面；`restart-required` 时先重启 `dsh web`，再刷新。
+仅刷新网页不能替换运行中的 Host 模块；新 Host 生效前，Client 保留旧耗时展示，缺少历史字段时不显示历史组。
 
 本包不发 npm，直接从仓库安装。
 
@@ -285,16 +287,18 @@ dsh plugin --profile web add github:liuhusk/dsh-status-card#v0.22.0
 | [cordis.patch.yml](cordis.patch.yml) | 插入 `dsh-status-card` 行 |
 | [package.json](package.json) | 包名、`dsh.bundle`、`dsh.client`（platform/immediately/inject）、图标 |
 | [locale/en.json](locale/en.json)、[locale/zh.json](locale/zh.json) | 插件管理器卡片的标题与描述 |
-| [icon.svg](icon.svg) | 插件卡片图标：右上角浮起的小卡片 |
+| [icon.png](icon.png) | 用户提供的插件图标（256 × 256 PNG） |
 | [screenshots.json](screenshots.json) | 插件市场读取的截图清单 |
 | [docs/VERIFICATION.md](docs/VERIFICATION.md) | 真机验证记录：哪些核对过、哪些还没有 |
-| [test/smoke.mjs](test/smoke.mjs) | 冒烟测试 103 条，`npm test`（只读源码，不写任何文件） |
-| [test/mutate.mjs](test/mutate.mjs) | 变异测试 104 条，证明冒烟断言非恒真，`npm run test:mutate`（每条变异只重跑它该弄坏的那几条用例、8 条并发，整轮约 6 秒） |
+| [test/smoke.mjs](test/smoke.mjs) | 组件级冒烟，由 `npm test` 统一运行 |
+| [test/host-state.mjs](test/host-state.mjs) | 耗时与历史任务确定性回归，`npm run test:state` |
+| [test/client-state.mjs](test/client-state.mjs) | 目标、会话切换、慢停止请求与实时时钟的确定性回归 |
+| [test/mutate.mjs](test/mutate.mjs) | 变异测试证明指定冒烟断言能发现退化；只重跑相关用例、最多 8 条并发 |
 
 ## 验证状态
 
-真机核对在**本机 Web UI**（`http://127.0.0.1:3080`，web profile 以 `link:` 指向本目录）上完成：
-改 Client 代码刷新页面即加载新模块，改 Host 半边要重启宿主才生效。
+真机核对在**本机 Web UI**（`http://127.0.0.1:3080`，web profile 以 `link:` 指向本目录）上完成。
+升级通过插件管理器加载 Host，并按其生效结果刷新页面或重启；各版本的核对环境分开记录。
 
 已通过：
 
@@ -303,12 +307,14 @@ dsh plugin --profile web add github:liuhusk/dsh-status-card#v0.22.0
   `window.__ModuleLoader__` 加载）。
 - **冒烟测试 103/103**：座位注册契约（`inject` 数组 / `shell.overlay` / order 50 / locale 命名空间 / 样式注入）、
   样式无颜色字面量且含隐藏官方任务面板的选择器、两道闸门与推让几何、任务 / 目标 / 计划 / 变更 / 子智能体 / 后台任务
-  六个区块、耗时行三段互不重叠、Host 半边日志扫描与路由口径，全部用 stub `__ModuleLoader__` + React
+  这些区块、耗时行三段互不重叠、Host 半边日志扫描与路由口径，全部用 stub `__ModuleLoader__` + React
   钩子垫片在组件级断言。
+- **状态回归 39/39**：Host 25 项覆盖并行区间去重、开放计时、结束冻结、增量扫描和历史清空；Client 14 项覆盖目标身份与原始 revision、晚响应、activation 竞态、停止请求等待与独立期限、会话首帧隔离、历史折叠和秒针。
+- **0.23.0 真机核对**：DSH 0.2.1-rc.5 通过插件管理器重新加载后返回 `applied`；认证路由已提供新计时字段和第 8 轮历史任务；历史默认收起、展开 3 条；目标编辑草稿切换会话即退出，返回后不复活；计时连续采样增长。详细记录见验证文档。
 - **变异测试 104/104**：每条变异都要求指定用例由 PASS 转 FAIL，证明冒烟断言不是恒真。`smoke.mjs` 支持
   `SC_ONLY=<用例 id>[,<用例 id>]` 只跑指定用例，变异脚本据此把每条变异缩到「只跑它会弄坏的那几条」，
   再用 8 条并发池跑（整轮 ~6 秒；对照组仍全量跑）。
-- **版式与色阶**（真机，浅色主题）：卡片 372px、`data-sc-block` 顺序为耗时条 → 计划 → 目标 → 任务 → 变更 → 子智能体 → 后台任务、区块间 1px 线 + 12px 间距、三档色阶与增删数字的实测色值、耗时行无底色且与分区标题同左缘。
+- **版式与色阶**（真机，浅色主题）：卡片 372px、`data-sc-block` 顺序为耗时条 → 计划 → 目标 → 本轮任务 → 历史任务 → 变更 → 子智能体 → 后台任务、区块间 1px 线 + 12px 间距、三档色阶与增删数字的实测色值、耗时行无底色且与分区标题同左缘。
 - **折叠与伸缩动画**（真机）：卡片与圆钮两态同心（三态中心换算成页面坐标后重合）、190ms 后卡片
   `visibility:hidden`、`prefers-reduced-motion` 下直接切换。
 - **会话区自适应**（真机，逐档视口 2100 / 1800 / 1600 / 1560）：不推让 → 推让生效且正文列宽不变 →
@@ -328,9 +334,7 @@ dsh plugin --profile web add github:liuhusk/dsh-status-card#v0.22.0
 
 仍未验证：
 
-- 目标操作的四个按钮（编辑 / 暂停 / 继续 / 清除）没有在真机上点过：`remote.goals.edit/pause/resume/clear`
-  的实际调用只由冒烟用例覆盖；disarmed 的会话点「暂停」会收到 `GOAL_INVALID_TRANSITION`
-  （按设计原样显示 Host 错误码）。
+- 目标四个操作按钮尚未逐一真机点击；跨会话、旧响应及恢复激活由确定性回归覆盖，实际核对结果另见验证记录。
 - 文件类型图标只在真机上肉眼看过 markdown / javascript / json 三种，其余语言的配色与标记只有冒烟断言。
 - 暗色主题下的整卡版式、右栏开合时的跟随平滑度，以及点文件行是否确实切到官方「变更审查」标签的对应文件。
 - 停止失败的红色「停止失败」态只在冒烟（`F21`）里用假服务覆盖过：真机首次点击就成功，没在真机上见到失败态。
@@ -359,9 +363,7 @@ dsh plugin --profile web add github:liuhusk/dsh-status-card#v0.22.0
   原因是宿主没有通用的客户端偏好服务，这个值又只有 Client 半边消费；等宿主提供偏好存储再迁过去。
 - **设置入口只在插件详情页**，且依赖 `plugins.bundle.config` 这个座位（宿主按「有没有 client 侧登记这个 key」决定渲染）。
   宿主哪天改掉这段渲染条件，就只剩卡片按上次选择换色、没有换色入口。
-- **子智能体行的耗时仍随渲染时刻变化**（`now` 每次渲染取一次），那几行没有自己的定时器；
-  卡片唯一的定时器在耗时条上：运行中每 2 秒重取一次路由（模型 / 工具时间边走边涨），
-  等待用户时每 1 秒重渲染一次（进行中的等待由渲染时刻减 `waitSince` 算出来，不发请求）。
+- **子智能体行的耗时随整卡重渲染更新**，没有逐行定时器；后台作业时长每秒更新。耗时路由每 2 秒采样，未结束的模型 / 工具 / 等待在客户端每秒按采样时刻外推，结束后冻结。
 - **「等你」只算宿主侧真在等人决策的时间**：`approval/asked`→`approval/decided`、`ask_user_question` 发问到答完。
   由 `foldTiming` 里的 `openWaits` 记起点、`closeWait` 结算；`turn/end` 时把还没结算的等待按事件时刻结清，
   避免一条没人回答的审批把数字越撑越大。总计 = 模型 + 工具 + 等你（含正在进行的那一段）。
@@ -380,9 +382,6 @@ dsh plugin --profile web add github:liuhusk/dsh-status-card#v0.22.0
   视觉上比品牌图朴素（.js 是橙色括号而不是黄色 JS 方标），但类型辨识度足够，且不违反配色规范。
   同理，主题里没有紫色 token，`image` / `video` 用 `--dsw-static-blue-400` 代替官方的
   `--dsh-file-type-violet`；`--dsw-static-*` 里也没有黄色，js 用最接近的 amber-500、json 用 amber-400。
-- **目标的 `activation`（armed/disarmed）不在客户端投影里**（`dsh-goal` 注明它是 process-local）。
-  所以按钮只按 `phase` 出：`active` 显示「暂停」、`paused` 显示「继续」。若目标处于 active 但已 disarmed
-  （例如本轮轮次用完），点「暂停」会收到 `GOAL_INVALID_TRANSITION`——卡片照实显示该错误，不做猜测。
 - **官方目标条保留可见**（本插件的目标块是「再给一个可操作入口」，不是替换），所以同一目标在两个
   位置各有一组按钮；两处都走同一条 Remote 与同一份 CAS 引用，不会互相写坏，但哪边先成功另一边
   会收到 `GOAL_STALE_REVISION` 并显示错误。
@@ -395,8 +394,9 @@ dsh plugin --profile web add github:liuhusk/dsh-status-card#v0.22.0
 ## 开发
 
 ```bash
-npm test            # 冒烟 103 条（只读源码，不写任何文件）
-npm run test:mutate # 变异 104 条：每条都必须让指定断言由 PASS 转 FAIL（并发跑，约 6 秒）
+npm test            # 组件冒烟 + Host / Client 状态回归
+npm run test:state  # 单跑确定性状态回归（Node 自带 test runner）
+npm run test:mutate # 每条变异必须让指定断言由 PASS 转 FAIL（按相关用例并发跑）
 ```
 
 纯 ESM JavaScript，零构建、零依赖，Node 22 及以上够用。真机核对过什么、没核对什么见

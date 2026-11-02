@@ -1,11 +1,39 @@
 # Verification status
 
 What has actually been checked, on which host, and what is still unverified. Test suites are part of the
-repository: `npm test` (103 smoke assertions) and `npm run test:mutate` (104 mutations; each mutant re-runs only the cases
+repository: `npm test` (103 smoke assertions plus 39 state regressions) and `npm run test:mutate` (104 mutations; each mutant re-runs only the cases
 it is expected to break, via `SC_ONLY`, in an 8-way parallel pool — the control run is always full).
 
-Host used for the live checks: DSH 0.2.1-rc.3, Web UI served on `http://127.0.0.1:3080`, installed into the
+Host used for the earlier live checks: DSH 0.2.1-rc.3, Web UI served on `http://127.0.0.1:3080`, installed into the
 `web` profile with a `link:` to the working copy, macOS, light and dark themes.
+
+## 0.23.0 checks — 2026-11-02
+
+- Environment: DSH 0.2.1-rc.5, the same local Web UI and linked working copy.
+- Automated: 103/103 smoke assertions, 39/39 state regressions (Host 25, Client 14),
+  104/104 expected mutation outcomes, both JavaScript syntax checks and `git diff --check` passed.
+- State regressions execute the actual Host functions and Client components with controlled clocks,
+  deferred promises and session switches. They cover overlapping tool intervals, open-stage sampling,
+  end-of-turn freezing, last-write history and explicit clears; goal identity and original revision,
+  late responses and activation-event races; pending stop requests beyond four seconds, synchronous
+  exceptions, rejection, duplicate clicks, stopping rows, per-job deadlines and watcher disposal.
+- Installation: the manager required removal of the existing local bundle before reinstalling the same
+  path. Both operations returned `application: applied`, with no warnings; the installed version is
+  0.23.0. No Host-process restart was needed on this version. The page was then refreshed.
+- The authenticated route returned `sampledAt`, `active` and `previousTodos` from the new Host.
+  The live card showed the real **turn 8** snapshot, three completed tasks, after the current task block.
+  It defaulted to `aria-expanded=false` with no historical rows rendered; opening it displayed all three
+  original tasks, and closing it restored the folded view.
+- Goal editing: opened the active goal editor, typed an unsaved test draft, switched to another session,
+  then returned. The editor and temporary draft disappeared immediately and did not reappear on return;
+  the actual goal objective was unchanged. No save, pause, resume or clear request was sent.
+- Live timing: two samples 2.2 seconds apart changed the turn total from `33m31s` to `33m33s`.
+  Slow/failing stop requests, disarmed-goal actions and final turn settlement were checked with the
+  deterministic component tests rather than altering the real running goal or jobs.
+- Artwork: the supplied square image now produces `icon.png` (256 × 256, under 256 KiB) and the existing
+  marketplace URL's `docs/icon-180.png` (180 × 180). Manifest and packaged-file references use the PNG.
+- The refreshed page had no status-card runtime exceptions. An unrelated notify-plugin host-bridge
+  request still returned 404.
 
 ## Automated
 
@@ -41,7 +69,7 @@ Host used for the live checks: DSH 0.2.1-rc.3, Web UI served on `http://127.0.0.
   (expanded only by a click), the row
   structure matches the host panel (dot / kind pill / mono label / settled reason / duration), the duration
   is formatted as `54秒`-style Chinese units and ticks once alive, stop is a two-step control that only calls
-  `kill(sessionId, jobId)` on the second click, the three `data-kill-state` values (`idle` / `armed` /
+  `kill(sessionId, jobId)` on the second click, the four `data-kill-state` values (`idle` / `armed` /
   `pending` / `failed`), a rejected `kill` answers `{ ok: false }` and shows "Stop failed", `watchRows` is
   called with the main session id, clearing finished rows is local-only, and the whole block disappears when
   `ctx.jobs` is absent.
@@ -70,7 +98,7 @@ Host used for the live checks: DSH 0.2.1-rc.3, Web UI served on `http://127.0.0.
   `apply` never runs), no `ctx.on('session/event')` seq accumulation in the source (the real host did not
   deliver those events), log scan of `workspace/changes` and `exit_plan_mode` (PTC keeps only the last
   event, incremental rescan continues from `lastSeq`), `sessionIndex` per session object plus scanned
-  length, route 400 without `sessionId`, `no-store` and `lastSeq` / `lastTurn` / `plans` / `timing` in the
+  length, route 400 without `sessionId`, `no-store` and `lastSeq` / `lastTurn` / `plans` / `timing` / `previousTodos` in the
   payload, timing fold semantics (model / tools pairing by callId, approvals and questions into `waitMs`,
   question span excluded from `toolMs`, unsettled waits closed at `turn/end`, new turn resets the account,
   orphan `tool/result` ignored), incremental rescan keeping timing state, and the three non-overlapping
@@ -125,7 +153,7 @@ Host used for the live checks: DSH 0.2.1-rc.3, Web UI served on `http://127.0.0.
   sub-session, dot `done`) and the count pill reads `1`, matching the official subagent directory; before
   the fix the same queue produced two rows, one of them stuck on `running`.
 - Background jobs on a live page (viewport 2560, dpr 2, dark theme): the block rendered **after** "Subagents"
-  (order: timing → plan → to-dos → goal → changes → subagents → background jobs) with the title "后台任务", a muted "1 个后台任务运行中" tail, one live row (a real
+  (order: timing → plan → goal → to-dos → changes → subagents → background jobs) with the title "后台任务", a muted "1 个后台任务运行中" tail, one live row (a real
   `sleep 90` job: spinner dot, mono command at full 276px width, `bash` pill, duration ticking `8秒 → 13秒`,
   a 20×20 square stop button at `data-kill-state=idle`) and the finished group (`› 已结束 4` + "清空",
   collapsed by default); opening it revealed four settled rows showing `exit code: 0` and `54秒` /
@@ -156,10 +184,10 @@ Host used for the live checks: DSH 0.2.1-rc.3, Web UI served on `http://127.0.0.
 
 ## Still unverified
 
-- The **goal action buttons** (edit / pause / resume / clear) have never been clicked on a live host: the
-  to-do block and the goal block render, but `remote.goals.*` calls are covered only by assertions, and
-  `activation` (armed/disarmed) is not in the projection, so a disarmed-but-active goal answers
-  `GOAL_INVALID_TRANSITION` and the card shows that error verbatim.
+- The four **goal action buttons** (edit / pause / resume / clear) have not all been clicked on a live
+  host. Identity isolation, activation and asynchronous failures are covered by deterministic tests.
+  Earlier notes claiming that pausing an active-but-disarmed goal must return
+  `GOAL_INVALID_TRANSITION` were incorrect; activation now comes from the official get/event channel.
 - File-type icons were only seen for markdown / JavaScript / JSON (markdown `rgb(65,118,230)`, js
   `rgb(245,158,11)`, json `rgb(247,173,49)`); ts / py / rs / go / java / C family / shell / css / config /
   sql colors and glyphs are only covered by assertions.
@@ -167,12 +195,13 @@ Host used for the live checks: DSH 0.2.1-rc.3, Web UI served on `http://127.0.0.
   light theme; the spinners were measured in dark). Right-panel open/close following was not inspected for
   smoothness, and the whitespace left above the composer after hiding the official to-do dock was not
   reviewed.
-- Clicking a changed-file row (does it really switch the official change-review pane to that file), and
-  whether `remote.goals` reaches the profile's `dsh-goal` on a live host, remain unchecked.
-- The last release (0.21.1) changed both halves (`wait` interval table, `subagentTurns`, turn grouping): the
-  host half needs a `dsh web` restart, the client half only a page reload. The client half was checked on a
-  live page (card renders, no console errors); the restart-time behavior of the new host fold is covered by
-  the offline log run above plus assertions.
+- Clicking a changed-file row (does it really switch the official change-review pane to that file)
+  remains unchecked live. Goal reads reached the live host; the four goal write actions remain covered
+  by deterministic tests rather than real mutations to the running goal.
+- Version 0.23.0 changes both halves. Upgrade through the plugin manager: refresh after `applied`,
+  or restart `dsh web` and refresh after `restart-required`. A client-only reload keeps compatibility
+  with the older payload but cannot enable host-side timing/history changes. Live checks for this
+  update are recorded separately from the older checks above.
 - The stop button's **failure** path (`kill` answering `{ok:false}` → `停止失败`) has only been exercised
   by `F21` with a stubbed service: on a live host the first attempt succeeded, so the red "Stop failed"
   state has not been seen for real.

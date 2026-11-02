@@ -8,9 +8,9 @@
  *       约 292px，再窄就盖住正文），宽度恢复后自动回来；锚点元素始终保留，
  *       否则测量链会断（offsetParent 测不到 → 宽度读回 null → 卡片复现），来回抖动。
  *
- * 内容（全部走官方只读通道）：
- *   - 任务：`todos` 投影（todo_write 写入、turn/start 重置）。
- *   - 目标：`goal` 投影（objective / phase / roundsStarted），只读——官方目标条保留操作入口。
+ * 内容（读取走官方投影与只读路由，操作走官方服务）：
+ *   - 任务：当前 `todos` 投影，另列 Host 路由保留的历史轮次快照。
+ *   - 目标：`goal` 投影 + 官方 activation 读取/事件，操作通过 remote.goals。
  *   - 本次变更：本插件 Host 路由 /api/status-card.changes（整会话按路径去重 + 来源坐标）。
  *   - 本轮耗时：同一条路由带出的 `timing`（模型 / 工具 / 等你），
  *     由宿主按会话事件里的 `time` 折叠，不依赖进程内监听。
@@ -21,7 +21,7 @@
  *       HIDE_OFFICIAL_TODO_DOCK，置 false 即恢复官方面板。
  *       卡片被空间闸门收起时**同步撤掉该标记**：替代品都不显示了，就不能再藏官方面板。
  *
- * 纯只读：不新增会话事件、不写官方状态、不改任何官方投影。卸载时样式、标记与座位注册一起回收。
+ * 不新增会话事件、不直接写官方状态或投影；用户操作由官方服务处理。卸载时样式、标记与座位注册一起回收。
  *
  * @author liuh
  */
@@ -431,12 +431,14 @@ window.__ModuleLoader__.load({
       'theme.red': '红',
       'theme.selected': '当前主题',
       'task.title': '任务',
+      'task.previous': '历史任务 · 第 {turn} 轮',
       'task.progress': '{done}/{total} 已完成',
       'task.more': '查看全部 {total} 项',
       'task.less': '收起',
       'list.expand': '展开',
       'list.collapse': '收起',
       'goal.title': '目标',
+      'goal.phase.ready': '待继续',
       'goal.phase.active': '进行中',
       'goal.phase.paused': '已暂停',
       'goal.phase.blocked': '受阻',
@@ -533,12 +535,14 @@ window.__ModuleLoader__.load({
       'theme.red': 'Red',
       'theme.selected': 'Current accent',
       'task.title': 'To-dos',
+      'task.previous': 'Previous tasks · Turn {turn}',
       'task.progress': '{done}/{total} completed',
       'task.more': 'Show all {total}',
       'task.less': 'Collapse',
       'list.expand': 'Expand',
       'list.collapse': 'Collapse',
       'goal.title': 'Goal',
+      'goal.phase.ready': 'Ready to continue',
       'goal.phase.active': 'Ongoing',
       'goal.phase.paused': 'Paused',
       'goal.phase.blocked': 'Blocked',
@@ -667,9 +671,10 @@ window.__ModuleLoader__.load({
       return 'idle';
     }
 
-    /** `goal` 投影 → 阶段词典键。 */
-    function goalPhaseKey(goal) {
+    /** 目标阶段叠加官方进程内 activation；未知状态仍按持久化阶段显示。 */
+    function goalPhaseKey(goal, activation) {
       const phase = goal?.goal?.phase;
+      if (phase === 'active' && activation === 'disarmed') return 'goal.phase.ready';
       return phase === 'paused' || phase === 'blocked' || phase === 'complete'
         ? `goal.phase.${phase}`
         : 'goal.phase.active';
@@ -850,9 +855,9 @@ window.__ModuleLoader__.load({
       return { id: current.id, revision: current.revision };
     }
 
-    /** 目标阶段 → 可用操作；`activation`（armed/disarmed）不在投影里，故按 phase 判断。 */
-    function goalActions(phase) {
-      if (phase === 'active') return { pause: true, resume: false };
+    /** 与官方目标条一致：未知 activation 不猜测，待实时 get/event 确认后才显示执行操作。 */
+    function goalActions(phase, activation) {
+      if (phase === 'active') return { pause: activation === 'armed', resume: activation === 'disarmed' };
       if (phase === 'paused') return { pause: false, resume: true };
       return { pause: false, resume: false };
     }
@@ -1032,30 +1037,89 @@ window.__ModuleLoader__.load({
      * @param sessionId 主会话 id
      */
     function useJobsRows(jobs, sessionId) {
-      /** 读当前快照里的本会话行（服务或会话缺席时给稳定空表）。 */
-      const readNow = () => {
-        if (jobs === undefined || jobs === null || sessionId === undefined) return NO_ROWS;
-        return jobs.state.getSnapshot().rows[String(sessionId)] ?? NO_ROWS;
-      };
-      const [rows, setRows] = React.useState(readNow);
+      const read = () => (jobs === undefined || jobs === null || sessionId === undefined
+        ? NO_ROWS
+        : jobs.state.getSnapshot().rows[String(sessionId)] ?? NO_ROWS);
+      const [snapshot, setSnapshot] = React.useState(() => ({ jobs, sessionId, rows: read() }));
       React.useEffect(() => {
-        const read = () => (jobs === undefined || jobs === null || sessionId === undefined
-          ? NO_ROWS
-          : jobs.state.getSnapshot().rows[String(sessionId)] ?? NO_ROWS);
-        const sync = () => setRows((prev) => {
+        let disposed = false;
+        const sync = () => {
+          if (disposed) return;
           const next = read();
-          return sameRows(prev, next) ? prev : next;
-        });
+          setSnapshot((previous) => (previous.jobs === jobs && previous.sessionId === sessionId && sameRows(previous.rows, next)
+            ? previous
+            : { jobs, sessionId, rows: next }));
+        };
         sync();
         if (jobs === undefined || jobs === null || sessionId === undefined) return undefined;
         const unsubscribe = jobs.state.subscribe(sync);
         const unwatch = jobs.watchRows(String(sessionId));
         return () => {
-          unwatch();
+          disposed = true;
           unsubscribe();
+          unwatch();
         };
       }, [jobs, sessionId]);
-      return rows;
+      // 会话切换首帧同步读新快照，绝不把旧行和新 sessionId 一起传给停止操作。
+      return snapshot.jobs === jobs && snapshot.sessionId === sessionId ? snapshot.rows : read();
+    }
+
+    /** 官方 GoalView 由 RemoteResult.value 返回；事件与 get 共用代次，迟到读取不能覆盖实时事件。 */
+    function useGoalActivation(runtime, sessionId, goal, running) {
+      const id = goal?.goal?.id;
+      const revision = goal?.goal?.revision;
+      const phase = goal?.goal?.phase;
+      const [snapshot, setSnapshot] = React.useState(null);
+      React.useEffect(() => {
+        if (runtime === undefined || runtime === null || sessionId === undefined || phase !== 'active'
+          || typeof id !== 'string' || typeof revision !== 'number') return undefined;
+        let disposed = false;
+        let epoch = 0;
+        const publish = (value) => {
+          if (disposed) return;
+          setSnapshot(value === undefined ? null : {
+            sessionId, id: value.id, revision: value.revision, activation: value.activation,
+          });
+        };
+        const refresh = () => {
+          if (typeof runtime.goals?.get !== 'function') return;
+          const readEpoch = ++epoch;
+          Promise.resolve().then(() => {
+            const sessions = runtime.sessions;
+            const binding = sessions?.binding?.(sessionId);
+            if (binding !== undefined && typeof sessions.using === 'function') {
+              return sessions.using(sessionId, { source: 'statusCardGoalActivation' }, async (reference) => {
+                if (sessions.binding(sessionId) !== binding) throw new Error('Goal session changed');
+                const state = reference.binding.session.getSnapshot();
+                if (state.openState !== 'open') throw state.openError ?? new Error('Goal session is not open');
+                return runtime.goals.get(sessionId);
+              });
+            }
+            return runtime.goals.get(sessionId);
+          }).then((result) => {
+            if (disposed || readEpoch !== epoch || result?.ok !== true) return;
+            publish(result.value);
+          }).catch(() => { /* 保持未知或最后已确认状态；读取失败不假装目标已 disarmed。 */ });
+        };
+        const unlisten = typeof runtime.remote?.$on === 'function'
+          ? runtime.remote.$on('goal/activation-changed', (event) => {
+            if (event.sessionId !== sessionId) return;
+            epoch += 1;
+            publish(event.goal);
+          })
+          : undefined;
+        const unreset = runtime.subscribeReset?.(refresh);
+        refresh();
+        return () => {
+          disposed = true;
+          epoch += 1;
+          unlisten?.();
+          unreset?.();
+        };
+      }, [runtime, sessionId, id, revision, phase, running]);
+      return snapshot !== null && snapshot.sessionId === sessionId && snapshot.id === id && snapshot.revision === revision
+        ? snapshot.activation
+        : undefined;
     }
 
     /**
@@ -1176,23 +1240,18 @@ window.__ModuleLoader__.load({
     /** 拉取整会话变更汇总；切换会话或轮次结束会重取，旧响应按 sessionId 丢弃。 */
     function useChanges(sessionId, revision, running) {
       const [state, setState] = React.useState({ status: 'idle', sessionId: undefined, value: null });
-      // 运行中要每隔两秒重取一次本轮耗时（模型 / 工具时间是边走边涨的）；
-      // 等待用户时只需要重渲染，「等你」由渲染时刻减去 `waitSince` 算出来。
+      // Host 运行时快照每两秒取一次；显示用的秒针由 useTimingNow 单独驱动。
       const [tick, setTick] = React.useState(0);
-      // 还在等人回答时 `waitSince` 是一个绝对时刻：存在就每秒重渲染，「等你」由渲染时刻减去它算出来。
-      // 轮次结束后没有未结算的等待，数字随之定格（轮次之间的空闲不算「等你」）。
-      const timing = state.value?.timing;
+      const timing = state.sessionId === sessionId ? state.value?.timing : undefined;
       const liveSince = typeof timing?.waitSince === 'number' ? timing.waitSince : null;
+      const active = timing?.active;
+      const pollMs = running === true || active === 'model' || active === 'tool' || active === 'wait'
+        ? 2000 : liveSince === null ? null : 1000;
       React.useEffect(() => {
-        if (typeof setInterval !== 'function') return undefined;
-        if (running === true) {
-          const timer = setInterval(() => setTick((value) => value + 1), 2000);
-          return () => clearInterval(timer);
-        }
-        if (liveSince === null) return undefined;
-        const timer = setInterval(() => setTick((value) => value + 1), 1000);
+        if (pollMs === null || typeof setInterval !== 'function') return undefined;
+        const timer = setInterval(() => setTick((value) => value + 1), pollMs);
         return () => clearInterval(timer);
-      }, [running, liveSince]);
+      }, [pollMs]);
       React.useEffect(() => {
         let cancelled = false;
         const controller = new AbortController();
@@ -1223,7 +1282,23 @@ window.__ModuleLoader__.load({
           controller.abort();
         };
       }, [sessionId, revision, tick]);
-      return state;
+      return state.sessionId === sessionId ? state : { status: 'loading', sessionId, value: null };
+    }
+
+    /** 新 Host 的开放区间只增加采样之后的秒数；轮次结算后清除秒针。 */
+    function useTimingNow(timing) {
+      const [now, setNow] = React.useState(() => Date.now());
+      const sampled = typeof timing?.sampledAt === 'number';
+      const live = sampled
+        ? timing.active === 'model' || timing.active === 'tool' || timing.active === 'wait'
+        : typeof timing?.waitSince === 'number';
+      React.useEffect(() => {
+        setNow(Date.now());
+        if (!live) return undefined;
+        const timer = setInterval(() => setNow(Date.now()), 1000);
+        return () => clearInterval(timer);
+      }, [live, timing?.sampledAt, timing?.active, timing?.waitSince]);
+      return now;
     }
 
     /**
@@ -1636,13 +1711,15 @@ window.__ModuleLoader__.load({
       const timing = value?.timing;
       if (timing === null || timing === undefined) return NO_ROWS;
       if (typeof timing.turn !== 'number') return NO_ROWS;
-      const modelMs = clockOf(timing.modelMs);
-      const toolMs = clockOf(timing.toolMs);
+      const sampled = typeof timing.sampledAt === 'number' && Number.isFinite(timing.sampledAt);
+      const liveMs = sampled && typeof now === 'number' ? Math.max(0, now - timing.sampledAt) : 0;
+      const modelMs = clockOf(timing.modelMs) + (sampled && timing.active === 'model' ? liveMs : 0);
+      const toolMs = clockOf(timing.toolMs) + (sampled && timing.active === 'tool' ? liveMs : 0);
       const waitMs = clockOf(timing.waitMs);
-      // 还在等人时，`waitSince` 是那一瞬的绝对时刻：不重新请求也能算出已经等了多久。
-      const liveWait = typeof timing.waitSince === 'number' && typeof now === 'number'
+      // 老 Host 的 waitMs 尚未包含开放等待；新 Host 已结算到 sampledAt，不能再叠加 waitSince。
+      const liveWait = !sampled && typeof timing.waitSince === 'number' && typeof now === 'number'
         ? Math.max(0, now - timing.waitSince)
-        : 0;
+        : sampled && timing.active === 'wait' ? liveMs : 0;
       const waited = waitMs + liveWait;
       const totalMs = modelMs + toolMs + waited;
       const segments = [
@@ -1873,17 +1950,17 @@ window.__ModuleLoader__.load({
      * 任务块：分组头（进度常显）+ 可折叠条目，与官方任务面板的「折叠 / 展开 + 进度」行为一致。
      * @param props.collapsed 条目是否收起（进度仍留在分组头里）
      */
-    function TaskBlock({ t, rows, collapsed, onToggleCollapsed, expanded, onToggle }) {
+    function TaskBlock({ t, rows, collapsed, onToggleCollapsed, expanded, onToggle, title, block = 'task', turn }) {
       if (rows.length === 0) return null;
       const progress = taskProgress(rows);
       const shown = expanded ? rows.slice(0, ROW_HARD_CAP) : rows.slice(0, ROW_LIMIT);
       const rest = rows.length - shown.length;
       // 进度百分比：整数取整，total 为 0 时不画进度条（那时块本身也不渲染）。
       const percent = progress.total === 0 ? 0 : Math.round((progress.done / progress.total) * 100);
-      return h('section', { className: 'sc_block', 'data-sc-block': 'task' }, [
+      return h('section', { className: 'sc_block', 'data-sc-block': block, 'data-sc-turn': turn }, [
         h(SectionHead, {
           key: 'head',
-          title: t('task.title'),
+          title: title ?? t('task.title'),
           tail: [
             h('span', { key: 'progress', className: 'sc_pill', 'data-tone': 'ok' },
               t('task.progress', { done: progress.done, total: progress.total })),
@@ -1891,7 +1968,7 @@ window.__ModuleLoader__.load({
               key: 'collapse',
               type: 'button',
               className: 'sc_iconBtn',
-              'data-sc-action': 'toggle-task',
+              'data-sc-action': block === 'task' ? 'toggle-task' : 'toggle-previous-tasks',
               'aria-expanded': !collapsed,
               'aria-label': t(collapsed ? 'list.expand' : 'list.collapse'),
               title: t(collapsed ? 'list.expand' : 'list.collapse'),
@@ -1929,81 +2006,104 @@ window.__ModuleLoader__.load({
       ]);
     }
 
+    function PreviousTasksBlock({ t, sessionId, previous }) {
+      const identity = JSON.stringify([sessionId, previous?.turn]);
+      const [opened, setOpened] = React.useState(null);
+      const [expanded, setExpanded] = React.useState(false);
+      const rows = taskRows(previous?.todos);
+      if (typeof previous?.turn !== 'number' || rows.length === 0) return null;
+      const open = opened === identity;
+      return h(TaskBlock, {
+        t, rows, block: 'previous-tasks', turn: previous.turn,
+        title: t('task.previous', { turn: previous.turn }),
+        collapsed: !open,
+        onToggleCollapsed: () => setOpened((current) => current === identity ? null : identity),
+        expanded, onToggle: () => setExpanded((current) => !current),
+      });
+    }
+
     /**
      * 目标块：显示 + 卡片内操作（编辑 / 暂停 / 继续 / 清除）。
      *
      * 操作走官方目标条同一条通道（`remote.goals.edit/pause/resume/clear`，参数为 `{id, revision}` CAS 引用），
      * 形态取其简化版：编辑是同条内联 textarea + 保存/取消，其余动作是分组头右侧的图标按钮。
-     * `activation`（armed/disarmed）不在客户端投影里，所以按钮只按 phase 出；
-     * 落空时把 Host 的错误码连同 message 原样显示（官方目标条也只展示错误）。
+     * `activation` 通过官方 GoalView 读取和 activation-changed 事件同步；未知时不猜测暂停或继续。
+     * 操作失败把 Host 的错误码连同 message 原样显示。
      * @param props.actions { edit(ref, objective), pause(ref), resume(ref), clear(ref) }，均返回 Remote 结果对象
      */
-    function GoalBlock({ t, goal, actions }) {
+    function GoalBlock({ t, sessionId, goal, activation, actions }) {
       const current = goal?.goal ?? null;
-      const currentId = current === null || current === undefined ? null : current.id;
+      const currentId = current?.id ?? null;
       const ref = goalRef(goal);
-      const [editing, setEditing] = React.useState(false);
-      const [draft, setDraft] = React.useState('');
-      const [pending, setPending] = React.useState(false);
-      const [error, setError] = React.useState(null);
-      const [clearedId, setClearedId] = React.useState(null);
-
+      const identity = JSON.stringify([sessionId, currentId]);
+      const owner = React.useRef(null);
+      if (owner.current?.identity !== identity) owner.current = { identity, pending: false, edit: null, disposed: false };
+      const scope = owner.current;
+      const empty = { identity, editing: false, draft: '', pending: false, error: null, cleared: false };
+      const [state, setState] = React.useState(empty);
+      const view = state.identity === identity ? state : empty;
+      const { editing, draft, pending, error } = view;
+      const isCurrent = () => owner.current === scope && !scope.disposed;
+      const update = (patch) => {
+        if (!isCurrent()) return;
+        setState((previous) => ({ ...(previous.identity === identity ? previous : empty), ...patch }));
+      };
       React.useEffect(() => {
-        // 清除成功后投影还要晚一拍才消失：清掉的 id 一旦不再出现，就解除乐观隐藏。
-        if (clearedId !== null && currentId !== clearedId) setClearedId(null);
-      }, [clearedId, currentId]);
+        scope.disposed = false;
+        return () => { scope.disposed = true; };
+      }, [scope]);
 
-      // 串行防重入：同一目标上的两个写操作互斥（官方目标条同样只允许一个在飞）。
+      // 同一身份上的写操作互斥；旧会话/旧目标的响应不能清除新目标的编辑框或错误。
       const run = async (task) => {
-        if (pending) return false;
-        setPending(true);
-        setError(null);
+        if (!isCurrent() || scope.pending) return false;
+        scope.pending = true;
+        update({ pending: true, error: null });
         try {
           const result = await task();
-          if (result !== null && result !== undefined && result.ok === false) {
+          if (!isCurrent()) return false;
+          if (result?.ok === false) {
             const code = result.error?.code ?? 'unknown';
             const message = typeof result.error?.message === 'string' ? result.error.message : '';
-            setError(t('goal.error', { detail: message === '' ? String(code) : `${message} (${code})` }));
+            update({ error: t('goal.error', { detail: message === '' ? String(code) : `${message} (${code})` }) });
             return false;
           }
           return true;
         } catch (failure) {
-          setError(t('goal.error', { detail: failure instanceof Error ? failure.message : String(failure) }));
+          update({ error: t('goal.error', { detail: failure instanceof Error ? failure.message : String(failure) }) });
           return false;
         } finally {
-          setPending(false);
+          scope.pending = false;
+          update({ pending: false });
         }
       };
 
-      if (current === null || current === undefined || typeof current.objective !== 'string') return null;
-      if (clearedId !== null && currentId === clearedId) return null;
-
+      if (current === null || typeof current.objective !== 'string' || view.cleared) return null;
       const rounds = typeof goal.roundsStarted === 'number' ? goal.roundsStarted : 0;
       const reason = current.blockedReason?.message;
-      const available = goalActions(current.phase);
+      const available = goalActions(current.phase, activation);
       const canAct = ref !== null && actions !== undefined && actions !== null;
-
       const startEdit = () => {
-        setError(null);
-        setDraft(current.objective);
-        setEditing(true);
+        if (!isCurrent() || scope.pending || !canAct) return;
+        // 保存使用开始编辑时的 ref 与 API。期间 revision 改变时交由 Host CAS 拒绝，绝不套新 ref 覆盖。
+        scope.edit = { ref: { ...ref }, actions };
+        update({ error: null, draft: current.objective, editing: true });
       };
       const cancelEdit = () => {
-        setEditing(false);
-        setDraft('');
+        if (!isCurrent()) return;
+        scope.edit = null;
+        update({ editing: false, draft: '' });
       };
       const save = async () => {
+        const edit = scope.edit;
         const objective = draft.trim();
-        if (objective === '' || ref === null) return;
-        if (await run(() => actions.edit(ref, objective))) cancelEdit();
+        if (!isCurrent() || !editing || edit === null || objective === '') return;
+        if (await run(() => edit.actions.edit(edit.ref, objective))) cancelEdit();
       };
       const act = (kind) => {
-        if (ref === null) return;
-        void run(async () => {
-          if (kind !== 'clear') return actions[kind](ref);
-          const result = await actions.clear(ref);
-          if (result === null || result === undefined || result.ok !== false) setClearedId(currentId);
-          return result;
+        if (!isCurrent() || !canAct) return;
+        const target = { ...ref };
+        void run(() => actions[kind](target)).then((ok) => {
+          if (ok && kind === 'clear') update({ cleared: true });
         });
       };
       const actionButton = (name, label, onClick) => h('button', {
@@ -2017,7 +2117,6 @@ window.__ModuleLoader__.load({
         onClick,
       }, h(Icon, { name, size: 14 }));
 
-      // 没有 CAS 引用（投影缺 id/revision）或目标服务缺席时一律不摆按钮：宁可只读，也不给点不动的入口。
       const buttons = [];
       if (canAct && !editing) {
         if (available.pause) buttons.push(actionButton('pause', t('goal.pause'), () => act('pause')));
@@ -2025,14 +2124,13 @@ window.__ModuleLoader__.load({
         buttons.push(actionButton('edit', t('goal.edit'), startEdit));
         buttons.push(actionButton('trash', t('goal.clear'), () => act('clear')));
       }
-
       return h('section', { className: 'sc_block', 'data-sc-block': 'goal' }, [
         h(SectionHead, {
           key: 'head',
           title: t('goal.title'),
           tail: [
-            h('span', { key: 'phase', className: 'sc_pill', 'data-tone': goalPhaseTone(current.phase) },
-              t(goalPhaseKey(goal))),
+            h('span', { key: 'phase', className: 'sc_pill', 'data-tone': goalPhaseTone(activation === 'disarmed' && current.phase === 'active' ? 'paused' : current.phase) },
+              t(goalPhaseKey(goal, activation))),
             h('span', { key: 'round', className: 'sc_blockMeta' }, t('goal.round', { round: rounds })),
             ...buttons,
           ],
@@ -2046,7 +2144,7 @@ window.__ModuleLoader__.load({
               rows: 3,
               'aria-label': t('goal.placeholder'),
               placeholder: t('goal.placeholder'),
-              onChange: (event) => setDraft(event.target.value),
+              onChange: (event) => update({ draft: event.target.value }),
               onKeyDown: (event) => {
                 if (event.key === 'Escape') cancelEdit();
               },
@@ -2225,9 +2323,36 @@ window.__ModuleLoader__.load({
      * @param props.rows 本会话的后台任务行（由卡片主体用 `useJobsRows` 订阅）
      */
     function JobsBlock({ t, sessionId, jobs, rows }) {
-      const [settledOpen, setSettledOpen] = React.useState(undefined);
-      const [clearedKeys, setClearedKeys] = React.useState(() => new Set());
-      const [kill, setKill] = React.useState(null);
+      const owner = React.useRef(null);
+      if (owner.current?.sessionId !== sessionId || owner.current?.jobs !== jobs) {
+        owner.current = { sessionId, jobs, kills: new Map(), disposed: false };
+      }
+      const scope = owner.current;
+      scope.rows = rows;
+      const initial = { scope, settledOpen: undefined, clearedKeys: new Set(), kills: scope.kills };
+      const [state, setState] = React.useState(initial);
+      const view = state.scope === scope ? state : initial;
+      const { settledOpen, clearedKeys, kills } = view;
+      const isCurrent = () => owner.current === scope && !scope.disposed;
+      const update = (patch) => {
+        if (!isCurrent()) return;
+        setState((previous) => ({ ...(previous.scope === scope ? previous : initial), ...patch }));
+      };
+      const setSettledOpen = (open) => update({ settledOpen: open });
+      const setKill = (key, value) => {
+        if (!isCurrent()) return;
+        const next = new Map(scope.kills);
+        if (value === null) next.delete(key);
+        else next.set(key, value.phase === 'pending' ? value : {
+          ...value, expiresAt: Date.now() + (value.phase === 'armed' ? 3000 : 4000),
+        });
+        scope.kills = next;
+        update({ kills: next });
+      };
+      React.useEffect(() => {
+        scope.disposed = false;
+        return () => { scope.disposed = true; };
+      }, [scope]);
       const [now, setNow] = React.useState(() => Date.now());
       const liveRows = rows.filter(jobIsLive);
       // 运行中的时长得自己走：卡片整体不挂定时器，只有这一节在真有活任务时开一秒一跳。
@@ -2239,10 +2364,15 @@ window.__ModuleLoader__.load({
       }, [liveRows.length]);
       // 两段确认的节奏照宿主后台任务面板：上膛 3 秒不点就退回，失败提示 4 秒后清掉。
       React.useEffect(() => {
-        if (kill === null) return undefined;
-        const timer = setTimeout(() => setKill(null), kill.phase === 'armed' ? 3000 : 4000);
-        return () => clearTimeout(timer);
-      }, [kill]);
+        const timers = [];
+        for (const [key, value] of kills) {
+          if (value.phase === 'pending') continue;
+          timers.push(setTimeout(() => {
+            if (scope.kills.get(key) === value) setKill(key, null);
+          }, Math.max(0, value.expiresAt - Date.now())));
+        }
+        return () => { for (const timer of timers) clearTimeout(timer); };
+      }, [kills, scope]);
       if (jobs === undefined || jobs === null || rows.length === 0) return null;
 
       const ordered = jobOrder(rows);
@@ -2255,24 +2385,26 @@ window.__ModuleLoader__.load({
 
       /** 停止：第一下只上膛，第二下才发 `job.kill`；失败则按钮变红，允许再点一次。 */
       const pressStop = (key) => {
-        const armed = kill !== null && kill.key === key && kill.phase === 'armed';
-        if (!armed) {
-          setKill({ key, phase: 'armed' });
+        if (!isCurrent() || scope.rows.find((row) => String(row.id) === key)?.status !== 'running') return;
+        const current = scope.kills.get(key);
+        if (current?.phase === 'pending') return;
+        if (current?.phase !== 'armed') {
+          setKill(key, { phase: 'armed' });
           return;
         }
-        setKill({ key, phase: 'pending' });
-        const settle = (ok) => setKill((current) => (current !== null && current.key === key && current.phase === 'pending'
-          ? (ok ? null : { key, phase: 'failed' })
-          : current));
-        Promise.resolve(jobs.kill(sessionId, key)).then((result) => settle(result?.ok === true)).catch(() => settle(false));
+        const request = { phase: 'pending' };
+        setKill(key, request);
+        const settle = (ok) => {
+          if (isCurrent() && scope.kills.get(key) === request) setKill(key, ok ? null : { phase: 'failed' });
+        };
+        Promise.resolve().then(() => jobs.kill(sessionId, key))
+          .then((result) => settle(result?.ok === true)).catch(() => settle(false));
       };
 
       const clearSettled = () => {
-        setClearedKeys((current) => {
-          const next = new Set(current);
-          for (const job of settledRows) next.add(String(job.id));
-          return next;
-        });
+        const next = new Set(clearedKeys);
+        for (const job of settledRows) next.add(String(job.id));
+        update({ clearedKeys: next });
       };
 
       /**
@@ -2292,7 +2424,8 @@ window.__ModuleLoader__.load({
         // 与宿主面板同一取舍：运行中优先显示进度（`3/10`），已结束优先显示结算原因（`exit code: 3`）；
         // 都没有才落回状态词——圆点已经说了一遍状态，这一格要放圆点说不出的信息。
         const note = live
-          ? (typeof job.progress === 'string' && job.progress !== '' ? job.progress : null)
+          ? job.status === 'stopping' ? t('jobs.status.stopping')
+            : (typeof job.progress === 'string' && job.progress !== '' ? job.progress : null)
           : (typeof job.detail === 'string' && job.detail !== '' ? job.detail : t(jobStatusKey(job.status)));
         const durationCell = duration === null ? null : h('span', {
           key: 'duration',
@@ -2314,8 +2447,8 @@ window.__ModuleLoader__.load({
             durationCell,
           ]));
         }
-        const phase = kill !== null && kill.key === key ? kill.phase : null;
-        const stopTitle = phase === 'armed'
+        const phase = kills.get(key)?.phase ?? null;
+        const stopTitle = job.status === 'stopping' ? t('jobs.status.stopping') : phase === 'armed'
           ? t('jobs.stopConfirm')
           : phase === 'failed' ? t('jobs.stopFailed') : t('jobs.stopTitle', { label });
         return h('li', { key: `job-${key}`, className: 'sc_jobLine', 'data-live': 'true' }, [
@@ -2341,7 +2474,7 @@ window.__ModuleLoader__.load({
             className: 'sc_stop',
             'data-sc-action': 'stop-job',
             'data-kill-state': phase ?? 'idle',
-            disabled: phase === 'pending',
+            disabled: phase === 'pending' || job.status !== 'running',
             title: stopTitle,
             'aria-label': stopTitle,
             onClick: () => pressStop(key),
@@ -2563,6 +2696,8 @@ window.__ModuleLoader__.load({
         const jobsSlot = services.jobsSlot;
         const jobs = useServiceValue(jobsSlot);
         const jobRows = useJobsRows(jobs, sessionId);
+        const goalsRuntime = useServiceValue(services.goalsSlot);
+        const activation = useGoalActivation(goalsRuntime, sessionId, goal, running);
         // 渲染时刻用作「现在」：运行中的活跃耗时按这一瞬算，随下次渲染前移。
         const now = Date.now();
         // 主题（高亮色）：跟卡片同一份模块级状态，`data-sc-theme` 落到卡片根上，
@@ -2572,6 +2707,7 @@ window.__ModuleLoader__.load({
         const anchorRef = React.useRef(null);
         const [revision, refresh] = useTurnRevision(running);
         const changes = useChanges(sessionId, revision, running);
+        const timingNow = useTimingNow(changes.value?.timing);
         const content = useContentElement(sessionId);
         const anchor = useAnchor(anchorRef, content);
         const geometry = anchor.geometry;
@@ -2604,8 +2740,10 @@ window.__ModuleLoader__.load({
         const fileRows = changeRows(changes.value);
         const teamInfo = teamSummary(team);
         // 状态条是本卡片的常驻信息（本轮耗时），只要这一轮有记录就不算空。
-        const timingRowList = timingSegments(t, changes.value, now);
+        const previousTodos = changes.value?.previousTodos;
+        const timingRowList = timingSegments(t, changes.value, timingNow);
         const hasContent = timingRowList.length > 0
+          || taskRows(previousTodos?.todos).length > 0
           || taskRowList.length > 0
           || (goal?.goal !== undefined && goal?.goal !== null)
           || planRowList.length > 0
@@ -2736,7 +2874,7 @@ window.__ModuleLoader__.load({
             refreshButton,
             toggleButton,
           ]),
-          // 分区顺序：状态条 → 计划 → 目标 → 任务 → 变更 → 子智能体 → 后台任务。
+          // 分区顺序：状态条 → 计划 → 目标 → 当前任务 → 历史任务 → 变更 → 子智能体 → 后台任务。
           h('div', { key: 'body', className: 'sc_body' }, hasContent ? [
             h(TimingBar, { key: 'timing', t, segments: timingRowList }),
             h(PlanBlock, {
@@ -2747,7 +2885,7 @@ window.__ModuleLoader__.load({
               onToggle: () => setPlansExpanded((value) => !value),
               onOpenPlan: openPlan,
             }),
-            h(GoalBlock, { key: 'goal', t, goal, actions: goalActionsApi }),
+            h(GoalBlock, { key: `goal:${sessionId}:${goal?.goal?.id ?? ''}`, t, sessionId, goal, activation, actions: goalActionsApi }),
             h(TaskBlock, {
               key: 'task',
               t,
@@ -2757,6 +2895,7 @@ window.__ModuleLoader__.load({
               expanded: tasksExpanded,
               onToggle: () => setTasksExpanded((value) => !value),
             }),
+            h(PreviousTasksBlock, { key: `previous:${sessionId}:${previousTodos?.turn ?? ''}`, t, sessionId, previous: previousTodos }),
             h(ChangesBlock, {
               key: 'changes',
               t,
@@ -2778,7 +2917,7 @@ window.__ModuleLoader__.load({
               onOpenSubagent: openSubagent,
             }),
             // 后台任务排在子智能体之后：与宿主「后台任务」面板的位置一致，也符合「先人后机器」的阅读顺序。
-            h(JobsBlock, { key: 'jobs', t, sessionId, jobs, rows: jobRows }),
+            h(JobsBlock, { key: `jobs:${sessionId}`, t, sessionId, jobs, rows: jobRows }),
           ] : h('div', { key: 'empty', className: 'sc_note' }, t('card.empty'))),
         ]), fab] : null);
       };
@@ -2834,6 +2973,7 @@ window.__ModuleLoader__.load({
           // 后台任务服务走「槽」而不是普通字段：服务可能在卡片挂载后才到位，
           // 普通赋值不会触发重渲染，槽会通知已订阅的组件。
           jobsSlot: createServiceSlot(),
+          goalsSlot: createServiceSlot(),
         };
 
         ctx.inject(['sidebarRight'], (scope) => {
@@ -2841,11 +2981,24 @@ window.__ModuleLoader__.load({
         });
 
         ctx.inject(['jobs'], (scope) => {
-          services.jobsSlot.set(scope.jobs);
+          scope.effect(() => {
+            services.jobsSlot.set(scope.jobs);
+            return () => services.jobsSlot.set(undefined);
+          });
         });
 
         ctx.inject(['remote', 'remote.goals'], (scope) => {
-          services.goals = scope.remote.goals;
+          scope.effect(() => {
+            services.goals = scope.remote.goals;
+            services.goalsSlot.set({
+              goals: scope.remote.goals, remote: scope.remote, sessions: scope.sessions,
+              subscribeReset: (listener) => typeof scope.on === 'function' ? scope.on('connection/reset', listener) : undefined,
+            });
+            return () => {
+              services.goals = undefined;
+              services.goalsSlot.set(undefined);
+            };
+          });
         });
 
         ctx.inject(['uiWorkspace'], (scope) => {

@@ -1,14 +1,15 @@
 {
   "name": "@liuhusk/dsh-status-card",
-  "version": "0.22.0",
+  "version": "0.23.0",
   "private": true,
   "type": "module",
-  "description": "A permanent status card in the top-right corner of the DSH content area: this turn's timing (model / tools / waiting), to-dos with progress, goal, submitted plans, changed files, and subagents.",
+  "description": "A permanent status card for DSH Web: live turn timing, current and historical to-dos, goal controls, submitted plans, changed files, subagents, and background jobs.",
   "author": "liuh",
   "license": "MIT",
-  "icon": "./icon.svg",
+  "icon": "./icon.png",
   "scripts": {
-    "test": "node test/smoke.mjs",
+    "test": "node test/smoke.mjs && node --test test/*-state.mjs",
+    "test:state": "node --test test/*-state.mjs",
     "test:mutate": "node test/mutate.mjs"
   },
   "exports": {
@@ -22,7 +23,7 @@
     "index.js",
     "client.js",
     "cordis.patch.yml",
-    "icon.svg",
+    "icon.png",
     "locale/*.json"
   ],
   "dsh": {

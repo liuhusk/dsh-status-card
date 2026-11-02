@@ -115,8 +115,8 @@ const MUTATIONS = [
   },
   {
     name: 'M17 路由里的 timing 不再被读到（状态条永远缺数据）',
-    from: 'const timingRowList = timingSegments(t, changes.value, now);',
-    to: 'const timingRowList = timingSegments(t, null, now);',
+    from: 'const timingRowList = timingSegments(t, changes.value, timingNow);',
+    to: 'const timingRowList = timingSegments(t, null, timingNow);',
     expectFail: ['B7', 'B8', 'F13', 'F14'],
   },
   {
@@ -239,7 +239,7 @@ const MUTATIONS = [
   },
   {
     name: 'M38 清除成功后不乐观隐藏（投影追平前闪回旧目标）',
-    from: 'if (result === null || result === undefined || result.ok !== false) setClearedId(currentId);',
+    from: "if (ok && kind === 'clear') update({ cleared: true });",
     to: '',
     expectFail: ['O7'],
   },
@@ -380,8 +380,8 @@ const MUTATIONS = [
   },
   {
     name: 'M60 目标块又排回任务下面',
-    from: "            h(GoalBlock, { key: 'goal', t, goal, actions: goalActionsApi }),\n            h(TaskBlock, {\n              key: 'task',\n              t,\n              rows: taskRowList,\n              collapsed: tasksCollapsed,\n              onToggleCollapsed: () => setTasksCollapsed((value) => !value),\n              expanded: tasksExpanded,\n              onToggle: () => setTasksExpanded((value) => !value),\n            }),\n",
-    to: "            h(TaskBlock, {\n              key: 'task',\n              t,\n              rows: taskRowList,\n              collapsed: tasksCollapsed,\n              onToggleCollapsed: () => setTasksCollapsed((value) => !value),\n              expanded: tasksExpanded,\n              onToggle: () => setTasksExpanded((value) => !value),\n            }),\n            h(GoalBlock, { key: 'goal', t, goal, actions: goalActionsApi }),\n",
+    from: "            h(GoalBlock, { key: `goal:${sessionId}:${goal?.goal?.id ?? ''}`, t, sessionId, goal, activation, actions: goalActionsApi }),\n            h(TaskBlock, {\n              key: 'task',\n              t,\n              rows: taskRowList,\n              collapsed: tasksCollapsed,\n              onToggleCollapsed: () => setTasksCollapsed((value) => !value),\n              expanded: tasksExpanded,\n              onToggle: () => setTasksExpanded((value) => !value),\n            }),\n",
+    to: "            h(TaskBlock, {\n              key: 'task',\n              t,\n              rows: taskRowList,\n              collapsed: tasksCollapsed,\n              onToggleCollapsed: () => setTasksCollapsed((value) => !value),\n              expanded: tasksExpanded,\n              onToggle: () => setTasksExpanded((value) => !value),\n            }),\n            h(GoalBlock, { key: `goal:${sessionId}:${goal?.goal?.id ?? ''}`, t, sessionId, goal, activation, actions: goalActionsApi }),\n",
     expectFail: ['F14'],
   },
   {

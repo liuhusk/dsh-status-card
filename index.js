@@ -137,198 +137,251 @@ export function planRecord(event) {
   return { callId, title: planTitle(markdown), seq: event.seq };
 }
 
-/**
- * 本轮耗时统计的初始状态（含内部记账字段，出站前由 `exportTiming` 裁掉）。
- */
+/** 本轮计时的可重放状态；三个区间表都保持升序、合并、不重叠。 */
 export function emptyTiming() {
   return {
     turn: null,
+    startedAt: null,
+    endedAt: null,
+    lastTime: null,
+    lastSeq: null,
     modelMs: 0,
     toolMs: 0,
-    // 已结算的等待区间（升序、重叠已合并）。存区间而不是只存总长，是为了把审批窗口
-    // 从「工具耗时」里扣掉——否则同一段时间既算工具又算等你。
+    models: [],
+    tools: [],
     waits: [],
     openStepStart: null,
     pendingCalls: {},
     openWaits: {},
+    seenCalls: {},
+    seenApprovals: {},
   };
 }
 
-/** 把区间并入已合并的等待表（重叠或相邻即合并），保证同一段时间不会记两遍。 */
-function addWait(waits, from, to) {
-  if (!(to > from)) return waits;
+/** 并入一个区间，包含相邻区间，避免并行执行或重复事件重复计时。 */
+function addSpan(spans, from, to) {
+  if (!(to > from)) return spans;
   const next = [];
   let merged = { from, to };
   let placed = false;
-  for (const span of waits) {
+  for (const span of spans) {
     if (span.to < merged.from) {
       next.push(span);
-      continue;
-    }
-    if (span.from > merged.to) {
-      if (!placed) {
-        next.push(merged);
-        placed = true;
-      }
+    } else if (span.from > merged.to) {
+      if (!placed) next.push(merged);
+      placed = true;
       next.push(span);
-      continue;
+    } else {
+      merged = { from: Math.min(span.from, merged.from), to: Math.max(span.to, merged.to) };
     }
-    merged = { from: Math.min(span.from, merged.from), to: Math.max(span.to, merged.to) };
   }
   if (!placed) next.push(merged);
   return next;
 }
 
-/** 等待区间在 `[from,to]` 内覆盖的总时长（工具耗时去重用）。 */
-function waitWithin(waits, from, to) {
+/** 两个已合并区间表的交集长度，线性扫描即可。 */
+function overlapTotal(left, right) {
   let total = 0;
-  for (const span of waits) {
-    const start = Math.max(span.from, from);
-    const end = Math.min(span.to, to);
-    if (end > start) total += end - start;
+  let i = 0;
+  let j = 0;
+  while (i < left.length && j < right.length) {
+    const a = left[i];
+    const b = right[j];
+    total += Math.max(0, Math.min(a.to, b.to) - Math.max(a.from, b.from));
+    if (a.to < b.to) i += 1;
+    else j += 1;
   }
   return total;
 }
 
-/** 等待区间总长（区间已合并，直接相加即不重叠）。 */
-function waitTotal(waits) {
-  let total = 0;
-  for (const span of waits) total += Math.max(0, span.to - span.from);
-  return total;
+function spanTotal(spans) {
+  return spans.reduce((total, span) => total + span.to - span.from, 0);
+}
+
+/** 将尚未闭合的区间临时采样；不修改日志折叠状态。 */
+function sampledSpans(closed, starts, until) {
+  let spans = closed;
+  for (const from of starts) {
+    if (typeof from === 'number') spans = addSpan(spans, from, until);
+  }
+  return spans;
+}
+
+/** 关闭一条等待记录；重复 decided/result 没有起点时不做任何结算。 */
+function closeWait(state, key, time) {
+  if (!Object.hasOwn(state.openWaits, key)) return state;
+  const openWaits = { ...state.openWaits };
+  const from = openWaits[key];
+  delete openWaits[key];
+  return { ...state, waits: addSpan(state.waits, from, time), openWaits };
 }
 
 /**
- * 把一条会话事件折叠进「本轮耗时」。
- *
- * 口径与官方 `sessionStats` 投影一致：模型时间 = `step/start` → `assistant/message`，
- * 工具时间 = `tool/call` → `tool/result`（按 callId 配对）。事件自带 `time`（epoch ms），
- * 所以统计能直接从历史日志复原，不需要进程内监听。
- *
- * 「等你」是三段之和，且三者互不重叠（同一段时间只记一次）：
- * ① 问人类 / 让人批准计划的工具（`ask_user_question`、`exit_plan_mode`）从调用到返回；
- * ② 工具执行期间弹出的审批（`approval/asked` → `decided`，同时从工具耗时里扣掉）；
- * ③ 这一轮交给用户之后（`turn/end` 到下一轮 `turn/start`），由客户端往后顺延计时。
- *
- * @param state - `emptyTiming()` 起的累计状态。
- * @param event - 会话事件。
- * @returns 新的累计状态。
+ * 从现有事件恢复模型、工具、等待区间。重叠时按 wait > tool > model 排他归属，
+ * 因此并行工具、审批与提问的重叠都只计算一次。step/start 在模型流式输出前已经存在，
+ * exportTiming 可据此实时采样；turn/end 会结算所有未返回调用并冻结这一轮。
  */
 export function foldTiming(state, event) {
-  const time = typeof event.time === 'number' && Number.isFinite(event.time) ? event.time : null;
-  if (time === null) return state;
+  if (event === null || event === undefined || !Number.isFinite(event.time)) return state;
+  const seq = Number.isInteger(event.seq) ? event.seq : null;
+  if (seq !== null && state.lastSeq !== null && seq <= state.lastSeq) return state;
+  const time = Math.max(event.time, state.lastTime ?? event.time);
+  const turn = Number.isFinite(event.data?.turn) ? event.data.turn : null;
+  if (event.type === 'turn/start') {
+    // 重放同一轮的 start 不应清掉已经折叠的调用和区间。
+    if (state.startedAt !== null && turn !== null && turn === state.turn) return state;
+    return { ...emptyTiming(), turn, startedAt: time, lastTime: time, lastSeq: seq ?? state.lastSeq };
+  }
+  if (state.endedAt !== null) return state;
+  let next = { ...state, lastTime: time, lastSeq: seq ?? state.lastSeq };
+  // 旧轮次的迟到结果不能结束当前轮次中恰好同名的调用。
+  if (turn !== null && state.turn !== null && turn !== state.turn) return next;
   switch (event.type) {
-    case 'turn/start':
-      return {
-        ...emptyTiming(),
-        turn: typeof event.data?.turn === 'number' ? event.data.turn : null,
-      };
     case 'step/start':
-      if (state.openStepStart !== null) return state;
-      return { ...state, openStepStart: time };
-    case 'assistant/message': {
-      if (state.openStepStart === null) return state;
-      return { ...state, modelMs: state.modelMs + Math.max(0, time - state.openStepStart), openStepStart: null };
-    }
+      if (state.openStepStart === null) {
+        next = { ...next, startedAt: state.startedAt ?? time, openStepStart: time };
+      }
+      break;
+    case 'assistant/message':
+    case 'step/end':
+      if (state.openStepStart !== null) {
+        next = { ...next, models: addSpan(state.models, state.openStepStart, time), openStepStart: null };
+      }
+      break;
     case 'tool/call': {
       const callId = event.data?.callId ?? event.data?.subCallId;
-      if (typeof callId !== 'string' || callId === '') return state;
-      // 问人类 / 让人类批准计划的工具：从 call 到 result 之间全是人在思考与点选，
-      // 这段既不是模型时间也不是工具执行时间，单记「等你」。
+      if (typeof callId !== 'string' || callId === '' || Object.hasOwn(state.seenCalls, callId)) break;
+      next = { ...next, startedAt: state.startedAt ?? time, seenCalls: { ...state.seenCalls, [callId]: true } };
       const name = event.data?.name;
       if (name === QUESTION_TOOL || name === PLAN_TOOL) {
-        return { ...state, openWaits: { ...state.openWaits, [`q:${callId}`]: time } };
+        next = { ...next, openWaits: { ...state.openWaits, [`q:${callId}`]: time } };
+      } else {
+        next = { ...next, pendingCalls: { ...state.pendingCalls, [callId]: time } };
       }
-      return { ...state, pendingCalls: { ...state.pendingCalls, [callId]: time } };
+      break;
     }
     case 'tool/result': {
-      const callId = event.data?.toolCallId ?? event.data?.message?.source?.callId;
-      if (typeof callId !== 'string' || callId === '') return state;
-      let next = state;
-      const start = next.pendingCalls[callId];
-      if (typeof start === 'number') {
-        const pendingCalls = { ...next.pendingCalls };
+      const callId = event.data?.toolCallId ?? event.data?.message?.toolCallId ?? event.data?.message?.source?.callId;
+      if (typeof callId !== 'string' || callId === '') break;
+      if (Object.hasOwn(state.pendingCalls, callId)) {
+        const pendingCalls = { ...state.pendingCalls };
+        const from = pendingCalls[callId];
         delete pendingCalls[callId];
-        // 工具执行期间可能弹出审批（plugin_manager / 命令提权等）：那段人已经算进「等你」，
-        // 这里从工具耗时里扣掉，避免同一段时间记两遍（真机 3 小时审批实测到过）。
-        let waited = waitWithin(next.waits, start, time);
-        for (const since of Object.values(next.openWaits)) {
-          if (typeof since === 'number' && time > since) waited += time - Math.max(since, start);
-        }
-        next = { ...next, toolMs: next.toolMs + Math.max(0, time - start - waited), pendingCalls };
+        next = { ...next, tools: addSpan(state.tools, from, time), pendingCalls };
       }
-      const waited = closeWait(next, `q:${callId}`, time);
-      return waited ?? next;
+      next = closeWait(next, `q:${callId}`, time);
+      break;
     }
-    // 审批：asked → decided 之间是人在点「允许/拒绝」，同样只算「等你」。
     case 'approval/asked': {
       const id = event.data?.id;
-      if (typeof id !== 'string' || id === '') return state;
-      return { ...state, openWaits: { ...state.openWaits, [`a:${id}`]: time } };
+      if (typeof id !== 'string' || id === '' || Object.hasOwn(state.seenApprovals, id)) break;
+      next = {
+        ...next,
+        startedAt: state.startedAt ?? time,
+        seenApprovals: { ...state.seenApprovals, [id]: true },
+        openWaits: { ...state.openWaits, [`a:${id}`]: time },
+      };
+      break;
     }
     case 'approval/decided': {
       const id = event.data?.id;
-      if (typeof id !== 'string' || id === '') return state;
-      return closeWait(state, `a:${id}`, time) ?? state;
+      if (typeof id === 'string' && id !== '') next = closeWait(next, `a:${id}`, time);
+      break;
     }
-    case 'turn/end': {
-      // 收尾：还在等人决策的那段算到这一瞬；未闭合的工具调用直接丢弃（不当作工具耗时）。
-      let waits = state.waits;
-      for (const since of Object.values(state.openWaits)) {
-        if (typeof since === 'number') waits = addWait(waits, since, time);
-      }
-      return {
-        ...state,
-        waits,
-        openWaits: {},
+    case 'turn/end':
+      next = {
+        ...next,
+        models: sampledSpans(state.models, [state.openStepStart], time),
+        tools: sampledSpans(state.tools, Object.values(state.pendingCalls), time),
+        waits: sampledSpans(state.waits, Object.values(state.openWaits), time),
+        endedAt: time,
         openStepStart: null,
         pendingCalls: {},
+        openWaits: {},
       };
-    }
+      break;
     default:
-      return state;
+      break;
   }
-}
-
-/** 关闭一个等待区间：有起点就并进等待表，否则返回 null 表示状态没变。 */
-function closeWait(state, key, time) {
-  const since = state.openWaits[key];
-  if (typeof since !== 'number') return null;
-  const openWaits = { ...state.openWaits };
-  delete openWaits[key];
-  return { ...state, waits: addWait(state.waits, since, time), openWaits };
-}
-
-export function exportTiming(state) {
-  const opens = Object.values(state.openWaits);
-  return {
-    turn: state.turn,
-    modelMs: state.modelMs,
-    toolMs: state.toolMs,
-    waitMs: waitTotal(state.waits),
-    // 正在等人的那一刻：客户端拿它算「等你」的增量（每秒重渲染，不再发请求）。
-    // 轮次结束（`turn/end`）后就没有未结算的等待了，数字随这一轮定格——「等你」只算
-    // 人真正卡住 agent 的时间（提问 / 计划批准 / 审批），不算轮次之间的空闲。
-    waitSince: opens.length === 0 ? null : Math.min(...opens),
-  };
+  // 保留既有纯函数调用者读取的内部累计字段，口径与导出一致。
+  const totals = exportTiming(next);
+  return { ...next, modelMs: totals.modelMs, toolMs: totals.toolMs };
 }
 
 /**
- * 扫描一段会话日志，抽出卡片需要的三类坐标。
- *
- * @param events - 会话事件（升序）。
- * @param previous - 上一批扫描结果，用于增量累加（同一文件不必重算）。
- * @returns `{ seqs, plans, timing, subagentTurns }`；`seqs` 升序去重，`plans` 按 callId 去重且只留最近
- *   PLAN_LIMIT 条，`subagentTurns` 是「子会话 → 它被派生的轮次」（卡片按轮次折叠用）。
+ * 采样包含尚未闭合的执行时间。默认用最后事件时刻，方便日志回放/纯函数测试；
+ * HTTP 路由显式传 Date.now()，客户端只对 active 指向的一段追加 now - sampledAt。
+ * waitSince 保留供旧调用者识别开放等待，新客户端不得再重复叠加它。
+ */
+export function exportTiming(state, now = state.lastTime ?? 0) {
+  const sampledAt = state.endedAt ?? Math.max(state.lastTime ?? 0, Number.isFinite(now) ? now : 0);
+  const waiting = Object.values(state.openWaits);
+  const tools = sampledSpans(state.tools, Object.values(state.pendingCalls), sampledAt);
+  const waits = sampledSpans(state.waits, waiting, sampledAt);
+  const models = sampledSpans(state.models, [state.openStepStart], sampledAt);
+  let excludedFromModel = tools;
+  for (const span of waits) excludedFromModel = addSpan(excludedFromModel, span.from, span.to);
+  const active = state.endedAt !== null ? null
+    : waiting.length > 0 ? 'wait'
+    : Object.keys(state.pendingCalls).length > 0 ? 'tool'
+    : state.openStepStart !== null ? 'model' : null;
+  return {
+    turn: state.turn,
+    modelMs: spanTotal(models) - overlapTotal(models, excludedFromModel),
+    toolMs: spanTotal(tools) - overlapTotal(tools, waits),
+    waitMs: spanTotal(waits),
+    waitSince: waiting.length === 0 ? null : Math.min(...waiting),
+    sampledAt,
+    active,
+  };
+}
+
+/** 官方 todo/write 是整表替换；保留最小只读字段，不持有事件对象。 */
+function todoSnapshot(event) {
+  const todos = event.data?.todos;
+  if (!Array.isArray(todos)) return null;
+  const valid = todos.every((item) => item !== null && typeof item === 'object'
+    && typeof item.content === 'string' && item.content.trim() !== ''
+    && ['pending', 'in_progress', 'completed'].includes(item.status));
+  return valid ? todos.map(({ content, status }) => ({ content, status })) : null;
+}
+
+/**
+ * 扫描现有日志，恢复变更坐标、计划、计时、子会话轮次以及最近历史任务。
+ * 当前轮任务继续使用官方 todos 投影；previousTodos 只在新轮开始时接收上一轮最后快照。
+ * 无写入轮保留更早的历史及真实轮次；显式 [] 则清空并遮蔽旧历史，防止列表复活。
  */
 export function scanLog(events, previous) {
   const seqs = previous === undefined ? [] : [...previous.seqs];
   const plans = previous === undefined ? [] : [...previous.plans];
   const subagentTurns = previous?.subagentTurns === undefined ? {} : { ...previous.subagentTurns };
-  let timing = previous === undefined || previous.timing === undefined ? emptyTiming() : previous.timing;
+  let timing = previous?.timing ?? emptyTiming();
+  let todoTurn = previous?.todoTurn ?? null;
+  let currentTodos = previous?.currentTodos ?? null;
+  let previousTodos = previous?.previousTodos ?? null;
+  let lastEventSeq = previous?.lastEventSeq ?? null;
   for (const event of events) {
+    const eventSeq = Number.isInteger(event.seq) ? event.seq : null;
+    if (eventSeq !== null && lastEventSeq !== null && eventSeq <= lastEventSeq) continue;
+    if (eventSeq !== null) lastEventSeq = eventSeq;
     timing = foldTiming(timing, event);
-    // 子目录事件只带子会话 id（label / 模式在子会话自己的投影里）：记下它属于哪一轮，
-    // 客户端据此把「整段历史的子智能体」按轮次分组。
+    if (event.type === 'turn/start') {
+      const turn = Number.isFinite(event.data?.turn) ? event.data.turn : null;
+      if (turn === null || turn !== todoTurn) {
+        if (todoTurn !== null && currentTodos !== null) {
+          previousTodos = currentTodos.length === 0 ? null : { turn: todoTurn, todos: currentTodos };
+        }
+        todoTurn = turn;
+        currentTodos = null;
+      }
+    } else if (event.type === 'todo/write') {
+      const todos = todoSnapshot(event);
+      if (todos !== null) {
+        currentTodos = todos;
+        if (todos.length === 0) previousTodos = null;
+      }
+    }
+    // 子目录事件只带子会话 id（label / 模式在子会话自己的投影里）：记下它属于哪一轮。
     if (event.type === 'subagent/catalog') {
       const childId = event.data?.childId;
       if (typeof childId === 'string' && childId !== '') {
@@ -348,7 +401,7 @@ export function scanLog(events, previous) {
     else plans[index] = record;
   }
   if (plans.length > PLAN_LIMIT) plans.splice(0, plans.length - PLAN_LIMIT);
-  return { seqs, plans, timing, subagentTurns };
+  return { seqs, plans, timing, subagentTurns, todoTurn, currentTodos, previousTodos, lastEventSeq };
 }
 
 /**
@@ -395,7 +448,8 @@ export function handleChangesRequest(ctx, cache, request) {
   return Response.json({
     ...collectChanges(ctx, index.seqs, sessionId),
     plans: index.plans,
-    timing: exportTiming(index.timing),
+    timing: exportTiming(index.timing, Date.now()),
+    previousTodos: index.previousTodos ?? null,
     // 子会话 → 派生它的轮次（卡片按轮次分组、折叠早前轮次）。
     subagentTurns: index.subagentTurns ?? {},
   }, {
