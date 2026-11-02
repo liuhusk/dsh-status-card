@@ -289,7 +289,7 @@ dsh plugin --profile web add github:liuhusk/dsh-status-card#v0.22.0
 | [screenshots.json](screenshots.json) | 插件市场读取的截图清单 |
 | [docs/VERIFICATION.md](docs/VERIFICATION.md) | 真机验证记录：哪些核对过、哪些还没有 |
 | [test/smoke.mjs](test/smoke.mjs) | 冒烟测试 103 条，`npm test`（只读源码，不写任何文件） |
-| [test/mutate.mjs](test/mutate.mjs) | 变异测试 103 条，证明冒烟断言非恒真，`npm run test:mutate`（每条变异只重跑它该弄坏的那几条用例、8 条并发，整轮约 6 秒） |
+| [test/mutate.mjs](test/mutate.mjs) | 变异测试 104 条，证明冒烟断言非恒真，`npm run test:mutate`（每条变异只重跑它该弄坏的那几条用例、8 条并发，整轮约 6 秒） |
 
 ## 验证状态
 
@@ -305,7 +305,7 @@ dsh plugin --profile web add github:liuhusk/dsh-status-card#v0.22.0
   样式无颜色字面量且含隐藏官方任务面板的选择器、两道闸门与推让几何、任务 / 目标 / 计划 / 变更 / 子智能体 / 后台任务
   六个区块、耗时行三段互不重叠、Host 半边日志扫描与路由口径，全部用 stub `__ModuleLoader__` + React
   钩子垫片在组件级断言。
-- **变异测试 103/103**：每条变异都要求指定用例由 PASS 转 FAIL，证明冒烟断言不是恒真。`smoke.mjs` 支持
+- **变异测试 104/104**：每条变异都要求指定用例由 PASS 转 FAIL，证明冒烟断言不是恒真。`smoke.mjs` 支持
   `SC_ONLY=<用例 id>[,<用例 id>]` 只跑指定用例，变异脚本据此把每条变异缩到「只跑它会弄坏的那几条」，
   再用 8 条并发池跑（整轮 ~6 秒；对照组仍全量跑）。
 - **版式与色阶**（真机，浅色主题）：卡片 372px、`data-sc-block` 顺序为耗时条 → 计划 → 目标 → 任务 → 变更 → 子智能体 → 后台任务、区块间 1px 线 + 12px 间距、三档色阶与增删数字的实测色值、耗时行无底色且与分区标题同左缘。
@@ -320,6 +320,11 @@ dsh plugin --profile web add github:liuhusk/dsh-status-card#v0.22.0
   切到该子会话、卡片副标题跟着变；队友行去重后与官方目录行数一致。
 - **运行态与暗色主题**（真机）：成员行与任务行的 `sc_spin` 时长 / 轨道色 / 缺口色、done 两态静态、
   `prefers-reduced-motion: reduce` 下停成静态环不闪。
+- **后台任务两段停止**（真机，真实 `sleep 600` 作业）：方形按钮初态 `data-kill-state=idle`、无文字、
+  `title="停止任务 <命令>"`；第一下变 `armed`、显示红描边「确认停止」、`title` 改为「再次点击确认停止」且
+  不发请求；第二下发出 `kill`，Host 报 `killed`（SIGTERM），活行消失、分组变「已结束 1」；展开后该行是弱色
+  已结束行 + 警告圆点 + Host 原文 `signal: SIGTERM; cancelled by the user` + `1分8秒`，即 `kill` 在真机上
+  确实到达宿主作业控制器。
 
 仍未验证：
 
@@ -328,8 +333,7 @@ dsh plugin --profile web add github:liuhusk/dsh-status-card#v0.22.0
   （按设计原样显示 Host 错误码）。
 - 文件类型图标只在真机上肉眼看过 markdown / javascript / json 三种，其余语言的配色与标记只有冒烟断言。
 - 暗色主题下的整卡版式、右栏开合时的跟随平滑度，以及点文件行是否确实切到官方「变更审查」标签的对应文件。
-- 后台任务的**真机两段停止**没有点过：`ctx.jobs.kill` 的成功 / 失败 / 三个 `data-kill-state` 过渡都由冒烟
-  用例（`F21`）用假服务覆盖；真机上只核对了运行中行的排版、每秒跳动的时长、已结束行的折叠与「清空」。
+- 停止失败的红色「停止失败」态只在冒烟（`F21`）里用假服务覆盖过：真机首次点击就成功，没在真机上见到失败态。
 
 详细记录见 [docs/VERIFICATION.md](docs/VERIFICATION.md)。
 
@@ -392,7 +396,7 @@ dsh plugin --profile web add github:liuhusk/dsh-status-card#v0.22.0
 
 ```bash
 npm test            # 冒烟 103 条（只读源码，不写任何文件）
-npm run test:mutate # 变异 103 条：每条都必须让指定断言由 PASS 转 FAIL（并发跑，约 6 秒）
+npm run test:mutate # 变异 104 条：每条都必须让指定断言由 PASS 转 FAIL（并发跑，约 6 秒）
 ```
 
 纯 ESM JavaScript，零构建、零依赖，Node 22 及以上够用。真机核对过什么、没核对什么见

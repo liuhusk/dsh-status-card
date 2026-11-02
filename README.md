@@ -104,7 +104,7 @@ stays. A turn's timing alone counts as content.
 
 ```bash
 npm test           # 101 component-level smoke assertions (reads sources only, writes nothing)
-npm run test:mutate # 103 mutations: each one must turn a named assertion from PASS to FAIL
+npm run test:mutate # 104 mutations: each one must turn a named assertion from PASS to FAIL
 ```
 
 Node 22+ is enough; there is no build step and no dependency. See [docs/VERIFICATION.md](docs/VERIFICATION.md)
@@ -152,7 +152,7 @@ the plugin marketplace displays):
 | [screenshots.json](screenshots.json) | Screenshot list consumed by the plugin marketplace |
 | [docs/VERIFICATION.md](docs/VERIFICATION.md) | What was verified on a real host, and what was not |
 | [test/smoke.mjs](test/smoke.mjs) | 103 smoke assertions, `npm test` |
-| [test/mutate.mjs](test/mutate.mjs) | 103 mutations proving the smoke assertions are not vacuous, `npm run test:mutate` (each mutant only re-runs the cases it is expected to break; 8 in parallel, ~6s) |
+| [test/mutate.mjs](test/mutate.mjs) | 104 mutations proving the smoke assertions are not vacuous, `npm run test:mutate` (each mutant only re-runs the cases it is expected to break; 8 in parallel, ~6s) |
 
 ## Known limitations
 

@@ -1,7 +1,7 @@
 # Verification status
 
 What has actually been checked, on which host, and what is still unverified. Test suites are part of the
-repository: `npm test` (103 smoke assertions) and `npm run test:mutate` (103 mutations; each mutant re-runs only the cases
+repository: `npm test` (103 smoke assertions) and `npm run test:mutate` (104 mutations; each mutant re-runs only the cases
 it is expected to break, via `SC_ONLY`, in an 8-way parallel pool — the control run is always full).
 
 Host used for the live checks: DSH 0.2.1-rc.3, Web UI served on `http://127.0.0.1:3080`, installed into the
@@ -76,7 +76,7 @@ Host used for the live checks: DSH 0.2.1-rc.3, Web UI served on `http://127.0.0.
   orphan `tool/result` ignored), incremental rescan keeping timing state, and the three non-overlapping
   waiting segments (plan approval counted as waiting and not as tool time, an approval window subtracted
   from `toolMs`, sum ≤ wall clock, `waitSince` null after `turn/end`).
-- Mutation testing, 103 mutations, each required to turn a named assertion from PASS to FAIL: background
+- Mutation testing, 104 mutations, each required to turn a named assertion from PASS to FAIL: background
   regressions (`bg-overlay`), removed hide-official-panel rule, gates stuck open, anchor disappearing with
   the card, unknown width treated as no room, lost `Math.round`, `>=`→`>`, marker not following the gate,
   layout regressions (280px card, 16px title, missing total, alpha-based diff colors, `auto` columns,
@@ -124,14 +124,22 @@ Host used for the live checks: DSH 0.2.1-rc.3, Web UI served on `http://127.0.0.
 - Teammate de-duplication: with one teammate plus its sub-session the block shows exactly one row (the
   sub-session, dot `done`) and the count pill reads `1`, matching the official subagent directory; before
   the fix the same queue produced two rows, one of them stuck on `running`.
-- Background jobs on a live page (viewport 2560, dpr 2, dark theme): the block rendered between "Changed
-  files" and "Subagents" with the title "后台任务", a muted "1 个后台任务运行中" tail, one live row (a real
+- Background jobs on a live page (viewport 2560, dpr 2, dark theme): the block rendered **after** "Subagents"
+  (order: timing → plan → to-dos → goal → changes → subagents → background jobs) with the title "后台任务", a muted "1 个后台任务运行中" tail, one live row (a real
   `sleep 90` job: spinner dot, mono command at full 276px width, `bash` pill, duration ticking `8秒 → 13秒`,
   a 20×20 square stop button at `data-kill-state=idle`) and the finished group (`› 已结束 4` + "清空",
   collapsed by default); opening it revealed four settled rows showing `exit code: 0` and `54秒` /
   `1分24秒` / `4分9秒` / `1秒`. Measured against the
   host panel: same row order (live first by start time, finished by finish time), same 20×20 button size,
   same `-90deg → 0` chevron, same hairline above the group header.
+- Background-jobs **stop path, clicked on a live host** (viewport 2560, dpr 2, dark theme, real job
+  `sleep 600`): the 20×20 square started at `data-kill-state=idle` with `title="停止任务 sleep 600; …"` and no
+  label; the first click turned it into `armed` with the red-outlined "确认停止" label and
+  `title="再次点击确认停止"` and sent nothing; the second click sent `kill` — the host reported the job as
+  `killed` (`SIGTERM`), the live row disappeared, and the group became `已结束 1`. Expanding it showed the
+  killed row as a settled row with a **warning dot** and the host's own detail
+  `signal: SIGTERM; cancelled by the user` plus `1分8秒`. So `ctx.jobs.kill` does reach the host job
+  controller in a real profile, and `killed → warning` matches the host panel.
 - Turn timing: after the host restart the route returns
   `{turn:20, modelMs:163965, toolMs:183922, waitSince:null}` and the line shows `This turn 5m48s` +
   `model 2m44s · tools 3m04s`. With an injected probe carrying `idleSince` (15s ago) four consecutive
@@ -165,9 +173,8 @@ Host used for the live checks: DSH 0.2.1-rc.3, Web UI served on `http://127.0.0.
   host half needs a `dsh web` restart, the client half only a page reload. The client half was checked on a
   live page (card renders, no console errors); the restart-time behavior of the new host fold is covered by
   the offline log run above plus assertions.
-- The **background-jobs stop button was never clicked on a live host**: the live page only had a running job
-  observed (rendering, ticking duration, chevron, clear), while `ctx.jobs.kill` success / failure and the
-  `armed` superscription are covered by `F21` with a stubbed service. Whether `kill` reaches the host job
-  controller in a real profile is therefore still unconfirmed.
+- The stop button's **failure** path (`kill` answering `{ok:false}` → `停止失败`) has only been exercised
+  by `F21` with a stubbed service: on a live host the first attempt succeeded, so the red "Stop failed"
+  state has not been seen for real.
 - The plugin marketplace's nightly build is outside this repository: whether `screenshots.json` is picked
   up, and how the store card looks, can only be confirmed after it runs.
