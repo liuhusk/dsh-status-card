@@ -260,7 +260,7 @@
 dsh plugin --profile web add github:liuhusk/dsh-status-card
 
 # 或钉住某个 Release 标签（见 Releases）
-dsh plugin --profile web add github:liuhusk/dsh-status-card#v0.23.0
+dsh plugin --profile web add github:liuhusk/dsh-status-card#v0.23.1
 ```
 
 本地 checkout 场景走应用内插件管理器（Creator 模式 + Full access）：`install_bundle`（target = 本目录

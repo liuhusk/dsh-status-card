@@ -7,6 +7,19 @@ it is expected to break, via `SC_ONLY`, in an 8-way parallel pool — the contro
 Host used for the earlier live checks: DSH 0.2.1-rc.3, Web UI served on `http://127.0.0.1:3080`, installed into the
 `web` profile with a `link:` to the working copy, macOS, light and dark themes.
 
+## 0.23.1 artwork checks — 2026-11-02
+
+- Replaced both icons with the user's transparent-background artwork. The supplied WebP's alpha channel
+  is preserved in `icon.png` (256 × 256, 24,014 bytes) and `docs/icon-180.png` (180 × 180, 15,555 bytes).
+- Both files decode as RGBA PNG, have alpha extrema 0–255 and fully transparent corners, and stay under
+  256 KiB. The manifest still references the packaged `icon.png`; the marketplace image URL is unchanged.
+- Installation: removed and reinstalled the linked bundle through the plugin manager; both operations
+  returned `application: applied`, with no warnings. The plugin detail page displays version 0.23.1.
+  Both displayed icons match the packaged PNG byte-for-byte (SHA-256 checked), and browser canvas pixel
+  reads confirm that all four corners have alpha 0. `npm pack --dry-run --json` includes the new icon.
+- This release only changes artwork, version metadata and documentation. The 0.23.0 runtime checks
+  below still describe the unchanged implementation.
+
 ## 0.23.0 checks — 2026-11-02
 
 - Environment: DSH 0.2.1-rc.5, the same local Web UI and linked working copy.

@@ -121,7 +121,7 @@ controller of that line).
 dsh plugin --profile web add github:liuhusk/dsh-status-card
 
 # or pin a release tag (see Releases)
-dsh plugin --profile web add github:liuhusk/dsh-status-card#v0.23.0
+dsh plugin --profile web add github:liuhusk/dsh-status-card#v0.23.1
 ```
 
 Or from a local checkout, through the in-app plugin manager (Creator mode / Full access):
