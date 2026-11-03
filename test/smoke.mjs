@@ -174,6 +174,18 @@ function makeAnchorStub(layerRect) {
   };
 }
 
+// 只替代官方模块边界，不复制 DSH 的分类表或 SVG；哨兵值证明结果原样传给官方组件。
+const fileIconCalls = [];
+const officialFileIcons = {
+  classifyFileType(name) { return `official:${name}`; },
+  FileTypeIcon({ kind, size, className }) {
+    fileIconCalls.push({ kind, size, className });
+    return ReactFake.createElement('svg', {
+      className, width: size, height: size, 'data-official-file-icon': true, 'data-official-kind': kind,
+    }, ReactFake.createElement('path', { d: 'M0 0L1 1' }));
+  },
+};
+
 /** 重新求值一次模块文件，得到全新的闭包状态（模块里有 collapsedMemory 这类模块级记忆）。 */
 function loadPlugin(resizeListeners = []) {
   let captured = null;
@@ -212,7 +224,8 @@ function loadPlugin(resizeListeners = []) {
   const plugin = captured.factory((id) => {
     requiredIds.push(id);
     if (id === 'react') return ReactFake;
-    throw new Error(`非预期的 require('${id}')：本插件只应依赖 react`);
+    if (id === '@deepseek-ai/dsh-client-ui-primitives') return officialFileIcons;
+    throw new Error(`非预期的 require('${id}')：仅允许 React 与共享文件图标模块`);
   });
   return { manifest: captured, plugin, requiredIds };
 }
@@ -838,22 +851,19 @@ await runCase('B18 卡片根 class 含 sc_card；任务行用勾选圆 sc_check�
   }
 });
 
-await runCase('B19 图标是自绘 SVG（sc_icon），且未 require 任何官方 primitives 包', async () => {
+await runCase('B19 操作图标仍自绘，文件图标仅复用指定官方模块', async () => {
   const { env, tree } = await render(richOpts());
   const svgs = findAll(tree, (node) => node.type === 'svg');
   expect(svgs.length >= 8, `svg 图标数量只有 ${svgs.length}，少于预期下限 8`);
-  // 自绘 svg 只有两个家族：单色线性图标 sc_icon（16 格、currentColor 描边）与
-  // 彩色文件类型图标 sc_fileIcon（28 格、色块填充、按 data-kind 上色）。
   const isLineIcon = (node) => hasClass(node, 'sc_icon')
     && node.props?.viewBox === '0 0 16 16' && node.props?.stroke === 'currentColor';
-  const isFileIcon = (node) => hasClass(node, 'sc_fileIcon')
-    && node.props?.viewBox === '0 0 28 28' && typeof node.props?.['data-kind'] === 'string';
+  const isFileIcon = (node) => hasClass(node, 'sc_fileIcon') && node.props?.['data-official-file-icon'] === true;
   const badClass = svgs.filter((node) => !isLineIcon(node) && !isFileIcon(node));
-  expect(badClass.length === 0, `${badClass.length} 个 svg 既不是 sc_icon 也不是 sc_fileIcon`);
+  expect(badClass.length === 0, `${badClass.length} 个 svg 既不是操作图标也不是官方文件图标`);
   const paths = findAll(tree, (node) => node.type === 'path');
   expect(paths.length >= svgs.length, `path 数量 ${paths.length} 少于 svg 数量 ${svgs.length}`);
   expect(paths.every((node) => typeof node.props?.d === 'string' && node.props.d.length > 0), '存在没有 d 的 path');
-  // 图标类名只允许本插件自绘的两类；任何「官方图标组件」的类名（含 icon 字样）都会被这条抓住。
+  // 测试替身仅标出官方组件身份；不把宿主实际 SVG 形状或类名写入本地测试。
   const iconClasses = new Set();
   walk(tree, (node) => { for (const cls of classOf(node)) if (/icon/iu.test(cls)) iconClasses.add(cls); });
   const strayIconClasses = [...iconClasses].filter((cls) => cls !== 'sc_icon' && cls !== 'sc_iconBtn' && cls !== 'sc_fileIcon');
@@ -861,10 +871,8 @@ await runCase('B19 图标是自绘 SVG（sc_icon），且未 require 任何官�
   // 除按钮容器外，凡是图标类名的元素都必须是 svg。
   const nonSvgIcons = findAll(tree, (node) => classOf(node).some((cls) => /icon/iu.test(cls)) && node.type !== 'svg' && !hasClass(node, 'sc_iconBtn'));
   expect(nonSvgIcons.length === 0, `${nonSvgIcons.length} 个图标元素不是 svg：${JSON.stringify(nonSvgIcons.map((n) => classOf(n)))}`);
-  const offenders = env.requiredIds.filter((id) => id !== 'react');
-  expect(offenders.length === 0, `require 了额外模块：${JSON.stringify(env.requiredIds)}`);
-  const suspicious = env.requiredIds.filter((id) => /primitive|icon|ui-|@deepseek|@dsh/iu.test(id));
-  expect(suspicious.length === 0, `require 命中官方包：${JSON.stringify(suspicious)}`);
+  expect(JSON.stringify(env.requiredIds) === JSON.stringify(['react', '@deepseek-ai/dsh-client-ui-primitives']),
+    `依赖超出 React 和官方文件图标：${JSON.stringify(env.requiredIds)}`);
 });
 
 // X. 加载方式自检（证明上面这些断言确实读到了真实的插件产出）
@@ -2031,58 +2039,21 @@ await runCase('F14 分区顺序：状态条 → 计划 → 目标 → 任务 →
     `分区顺序为 ${JSON.stringify(order)}，应为 ${JSON.stringify(expected)}`);
 });
 
-await runCase('F15 变更行用彩色文件类型图标：按语言分类（js/ts/json/py…各有类型与颜色）', async () => {
-  const files = [
-    fileRow('dsh-status-card/README.md'),
-    fileRow('dsh-status-card/client.js'),
-    fileRow('dsh-status-card/package.json'),
-    fileRow('tools/build.py'),
-    fileRow('theme/styles.css'),
-    fileRow('assets/logo.png'),
-  ];
-  const { env, tree } = await render({ fetchImpl: changesFetch(files) });
+await runCase('F15 变更行直接使用官方 FileTypeIcon，保持分类结果及 16px 尺寸', async () => {
+  const paths = ['dsh-status-card/README.md', 'dsh-status-card/client.js', 'dsh-status-card/package.json',
+    'tools/build.py', 'theme/styles.css', 'assets/logo.png'];
+  const { tree } = await render({ fetchImpl: changesFetch(paths.map((path) => fileRow(path))) });
   const icons = findAll(tree, (node) => hasClass(node, 'sc_fileIcon'));
-  expect(icons.length === files.length, `文件类型图标数量 ${icons.length} 与文件行数 ${files.length} 不一致`);
-  const kinds = icons.map((node) => node.props['data-kind']);
-  expect(kinds.join() === 'markdown,javascript,json,python,stylesheet,image',
-    `类型分类为 ${JSON.stringify(kinds)}，与扩展名不符`);
-  expect(new Set(kinds).size === kinds.length, '不同类型的文件必须落到不同类型（不允许都挤成 code）');
-  expect(icons.every((node) => node.props.width === 16 && node.props.height === 16 && node.props.viewBox === '0 0 28 28'),
-    '文件类型图标必须是 16px、28 格视图');
-  // 每颗图标都有「页形 + 折角 + 类型标记」三部分（other 只有页形 + 折角）。
-  const markCount = icons.map((node) => findAll(node, (item) => item.props?.['data-file-type-mark'] === true).length);
-  expect(markCount.join() === '1,1,1,1,1,1', `类型标记组数量为 ${JSON.stringify(markCount)}`);
-  // 语言图标必须有可辨认的实际字标，不能只换 data-kind / 颜色、继续共用 </>。
-  expect(textOf(icons[1]) === 'JS', 'JavaScript 图标缺少 JS 字标');
-  expect(textOf(icons[3]) === 'PY', 'Python 图标缺少 PY 字标');
-  // 颜色只允许来自 token：类型色是 --dsw-static-*，标记是 --dsw-static-neutral-00。
-  const colorOf = (kind) => new RegExp(`\\.sc_fileIcon\\[data-kind=${kind}\\][^{]*\\{color:var\\(--dsw-static-[a-z0-9-]+\\)`).test(env.css);
-  for (const kind of ['code', 'markdown', 'excel', 'image', 'pdf',
-    'javascript', 'typescript', 'json', 'python', 'rust', 'go', 'java', 'clang',
-    'shell', 'stylesheet', 'config', 'sql']) {
-    expect(colorOf(kind), `缺少 .sc_fileIcon[data-kind=${kind}] 的颜色规则`);
+  expect(icons.length === paths.length, '每条文件行都应使用官方图标组件');
+  for (const [index, path] of paths.entries()) {
+    expect(icons[index].props['data-official-file-icon'] === true, `${path} 没有使用官方组件`);
+    expect(icons[index].props['data-official-kind'] === `official:${path.split('/').at(-1)}`,
+      `${path} 没有原样传递官方分类结果`);
+    expect(icons[index].props.width === 16 && icons[index].props.height === 16, `${path} 不是 16px`);
   }
-  // 语言之间颜色必须两两不同（否则「按类型区分」只是说说）。
-  const colorTokenOf = (kind) => {
-    const rule = new RegExp('\\.sc_fileIcon\\[data-kind=' + kind + '\\]\\{color:var\\((--dsw-static-[a-z0-9-]+)\\)');
-    return (rule.exec(env.css) ?? [])[1] ?? '';
-  };
-  const languageColors = ['javascript', 'typescript', 'json', 'python', 'rust', 'go', 'java', 'clang', 'stylesheet']
-    .map(colorTokenOf);
-  expect(languageColors.every((item) => item !== ''), `语言颜色解析失败：${JSON.stringify(languageColors)}`);
-  expect(new Set(languageColors).size === languageColors.length,
-    `语言颜色出现了重复：${JSON.stringify(languageColors)}`);
-  expect(/\.sc_fileIcon\[data-kind=markdown\][^{]*\{color:var\(--dsw-static-deepseek-500\)/.test(env.css),
-    'markdown 的颜色应与侧边栏一致（deepseek-500）');
-  expect(/\.sc_fileIcon\[data-kind=excel\][^{]*\{color:var\(--dsw-static-green-500\)/.test(env.css),
-    'excel 的颜色应与侧边栏一致（green-500）');
-  expect(/\.sc_fileIcon\[data-kind=pdf\][^{]*\{color:var\(--dsw-static-red-600\)/.test(env.css),
-    'pdf 的颜色应与侧边栏一致（red-600）');
-  // 图标里不许出现字面色值（颜色只能走 token）。
-  expect(!/#[0-9a-f]{3,8}\b|rgba?\(/iu.test(env.css), '样式里出现了字面色值，颜色必须走 --dsw-* token');
 });
 
-await runCase('F23 文件图标按真实后缀与完整文件名分类，不受目录、原型属性或 README 前缀干扰', async () => {
+await runCase('F23 所有路径以原始 basename 交给官方分类，不再维护本地语言规则', async () => {
   const cases = [
     ['src/app.JS', 'javascript'], ['src/app.mjs', 'javascript'], ['src/app.cjs', 'javascript'],
     ['src/View.jsx', 'javascript'], ['src/view.TSX', 'typescript'], ['src/index.d.ts', 'typescript'],
@@ -2106,28 +2077,22 @@ await runCase('F23 文件图标按真实后缀与完整文件名分类，不受�
     const { tree } = await render({ fetchImpl: changesFetch(batch.map(([path]) => fileRow(path))) });
     const icons = findAll(blockOf(tree, 'changes'), (node) => hasClass(node, 'sc_fileIcon'));
     expect(icons.length === batch.length, `图标数量不符：${JSON.stringify(batch)}`);
-    for (const [index, [path, kind]] of batch.entries()) {
-      expect(icons[index].props['data-kind'] === kind,
-        `${path} 应为 ${kind}，实际为 ${String(icons[index].props['data-kind'])}`);
-      const marks = findAll(icons[index], (node) => node.props?.['data-file-type-mark'] === true);
-      expect(marks.length === (kind === 'other' ? 0 : 1), `${path} 的类型标记数量不符`);
+    for (const [index, [path]] of batch.entries()) {
+      const name = path.split(/[\\/]+/u).at(-1);
+      expect(icons[index].props['data-official-kind'] === `official:${name}`,
+        `${path} 没有交给官方分类器，或分类结果被本地规则改写`);
     }
   }
 });
 
-await runCase('F24 JS / TS / Python / Rust / Go / Java 的实际图标标记独立可辨', async () => {
-  const { tree } = await render({ fetchImpl: changesFetch([
-    fileRow('main.js'), fileRow('main.ts'), fileRow('main.py'),
-    fileRow('main.rs'), fileRow('main.go'), fileRow('Main.java'),
-  ]) });
-  const icons = findAll(blockOf(tree, 'changes'), (node) => hasClass(node, 'sc_fileIcon'));
-  const labels = icons.map((node) => textOf(node));
-  expect(labels.join() === 'JS,TS,PY,RS,GO,JAVA', `语言标记错误：${JSON.stringify(labels)}`);
-  const glyphs = icons.map((icon) => {
-    const mark = findAll(icon, (node) => node.props?.['data-file-type-mark'] === true)[0];
-    return JSON.stringify(mark?.props.children);
-  });
-  expect(new Set(glyphs).size === 6, '不同语言仍共用了同一图形，仅颜色不同');
+await runCase('F24 不再附带自有文件图形、语言分类表或覆盖官方颜色', async () => {
+  const { env } = await render({ fetchImpl: changesFetch([fileRow('main.ts')]) });
+  expect(!/FILE_(?:PAGE|FOLD|MARKS|LANGUAGE_LABELS|EXT_KINDS|NAME_KINDS|CODE_EXTS)\b/u.test(SRC),
+    '仍然保留了本地图形或分类表');
+  const decls = cssDecls(ruleOf(env.css, '.sc_fileIcon')?.body ?? '');
+  expect(decls.width === '16px' && decls.height === '16px', '文件图标占位应保留 16px');
+  expect(!('color' in decls) && !('fill' in decls) && !('stroke' in decls), '本地样式覆盖了官方图标颜色');
+  expect(!/\.sc_fileIcon\[/u.test(env.css), '仍按本地类型选择器覆盖官方图标');
 });
 
 await runCase('F16 子会话的计划用官方五段地址（plan/subagent/<parent>/<child>/<mode>/<callId>）', async () => {

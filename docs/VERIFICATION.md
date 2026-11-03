@@ -1,11 +1,31 @@
 # Verification status
 
 What has actually been checked, on which host, and what is still unverified. Test suites are part of the
-repository: `npm test` (105 smoke assertions plus 39 state regressions) and `npm run test:mutate` (109 mutations; each mutant re-runs only the cases
+repository: `npm test` (105 smoke assertions plus 39 state regressions) and `npm run test:mutate` (104 mutations; each mutant re-runs only the cases
 it is expected to break, via `SC_ONLY`, in an 8-way parallel pool — the control run is always full).
 
 Host used for the earlier live checks: DSH 0.2.1-rc.3, Web UI served on `http://127.0.0.1:3080`, installed into the
 `web` profile with a `link:` to the working copy, macOS, light and dark themes.
+
+## 0.23.3 shared Workspace Files icons — 2026-11-03
+
+- Replaced the plugin's file SVGs, language labels, extension/name tables and type-color overrides with
+  the same `FileTypeIcon` and `classifyFileType` exports used by DSH Workspace Files. Only layout remains
+  local: 16 × 16 px, matching file-browser rows. Existing action icons are unchanged.
+- Runtime evidence: installed `ui-sidebar-files/lib/client.js` calls those exports; the authenticated Web
+  frontend exposes both from its shared primitives module. No hashed asset URL or copied artwork is used.
+- Automated: 105/105 smoke cases, 39/39 state regressions and 104/104 expected mutation outcomes pass.
+  F15 verifies actual delegation and sizing; F23 checks basename forwarding across 44 path examples;
+  F24 prevents local artwork/classification tables and file-color overrides from returning. The official
+  module is replaced only at the test boundary, so these tests do not claim to retest DSH's own icon library.
+- Installed 0.23.3 through the official manager: removal and installation both returned `application: applied`
+  with no warnings. Refreshed DSH 0.2.1-rc.5 at `http://127.0.0.1:3080`; the card loaded without an exception.
+- Live verification: the changed submodule-pointer row renders the official `other` icon at 16px with no
+  added text glyph. React component identity is equal to Workspace Files rows for `.gitignore`, `.gitmodules`,
+  `AGENTS.md` and `README.md`; those rows use the host's `git` and `markdown` kinds. Other languages were not
+  individually inspected on the page. The unrelated notify host-bridge 404 and Datadog warning remain.
+- This direct reuse is scoped to the user's requested file-icon behavior. The host must provide the two
+  shared exports; compatibility was checked on DSH 0.2.1-rc.5. No npm dependencies were added.
 
 ## 0.23.2 file-icon checks — 2026-11-03
 
@@ -110,7 +130,7 @@ Host used for the earlier live checks: DSH 0.2.1-rc.3, Web UI served on `http://
   revision }`, inline textarea edit with trimmed commit and blank-draft guard, `role="alert"` on host
   rejection, optimistic hide on clear, read-only degradation when the goal service or the CAS reference is
   missing, lazy `ctx.inject` for the right panel and goal service (the plugin's `inject` array is never
-  extended), changes grouping with the current turn first, per-language file-type kinds and colors.
+  extended), changes grouping with the current turn first, delegation to the shared official file classifier and icon component.
   Layout assertions 13: 372px card / 16px padding / 28px rows / 16px icon column, block separators with no
   line before the first block, hover pill overflowing 6px each side, totals block, marker-token colors for
   `+/−` (the `--dsw-alias-code-diff-*` tokens are 8–12% **backgrounds**, so they would be invisible as
@@ -135,7 +155,7 @@ Host used for the earlier live checks: DSH 0.2.1-rc.3, Web UI served on `http://
   orphan `tool/result` ignored), incremental rescan keeping timing state, and the three non-overlapping
   waiting segments (plan approval counted as waiting and not as tool time, an approval window subtracted
   from `toolMs`, sum ≤ wall clock, `waitSince` null after `turn/end`).
-- Mutation testing, 109 mutations, each required to turn a named assertion from PASS to FAIL: background
+- Mutation testing, 104 mutations, each required to turn a named assertion from PASS to FAIL: background
   regressions (`bg-overlay`), removed hide-official-panel rule, gates stuck open, anchor disappearing with
   the card, unknown width treated as no room, lost `Math.round`, `>=`→`>`, marker not following the gate,
   layout regressions (280px card, 16px title, missing total, alpha-based diff colors, `auto` columns,

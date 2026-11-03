@@ -60,9 +60,9 @@ const MUTATIONS = [
     expectFail: ['B6'],
   },
   {
-    name: 'M8 引入官方 primitives 依赖',
+    name: 'M8 引入文件图标以外的官方 UI 依赖',
     from: "    const React = require('react');",
-    to: "    const React = require('react');\n    const primitives = require('@deepseek-ai/dsh-client-ui-primitives');",
+    to: "    const React = require('react');\n    const layout = require('@deepseek-ai/dsh-client-ui-layout');",
     expectFail: ['B19'],
   },
   {
@@ -403,33 +403,33 @@ const MUTATIONS = [
     expectFail: ['F9'],
   },
   {
-    name: 'M64 文件类型一律落到 other（不再按扩展名分类）',
-    from: "      if (Object.hasOwn(FILE_EXT_KINDS, ext)) return FILE_EXT_KINDS[ext];",
-    to: "      if (Object.hasOwn(FILE_EXT_KINDS, ext)) return 'other';",
+    name: 'M64 绕过官方分类器强行使用 other',
+    from: 'kind: classifyFileType(name)',
+    to: "kind: 'other'",
     expectFail: ['F15'],
   },
   {
-    name: 'M65 文件类型色退回单一前景色（不再按类型上色）',
-    from: "'.sc_fileIcon[data-kind=code],.sc_fileIcon[data-kind=html],.sc_fileIcon[data-kind=markdown]{color:var(--dsw-static-deepseek-500)}',",
-    to: "'.sc_fileIcon[data-kind=code],.sc_fileIcon[data-kind=html],.sc_fileIcon[data-kind=markdown]{color:var(--sc-fg)}',",
+    name: 'M65 不再调用官方图标组件',
+    from: "return h(FileTypeIcon, { kind: classifyFileType(name), size, className: 'sc_fileIcon' });",
+    to: "return h('svg', { width: size, height: size, className: 'sc_fileIcon' });",
     expectFail: ['F15'],
   },
   {
-    name: 'M66 彩色图标丢掉类型标记（只剩一张空页形）',
-    from: "      if (mark !== undefined) {",
-    to: "      if (mark === undefined) {",
-    expectFail: ['F15'],
+    name: 'M66 本地 CSS 再次覆盖官方文件颜色',
+    from: "'.sc_fileIcon{flex:none;width:16px;height:16px}',",
+    to: "'.sc_fileIcon{flex:none;width:16px;height:16px;color:var(--sc-fg)}',",
+    expectFail: ['F24'],
   },
   {
-    name: 'M67 语言不再分家（.js 退回通用 code 类型）',
-    from: "      js: 'javascript', mjs: 'javascript', cjs: 'javascript', jsx: 'javascript',",
-    to: "      js: 'code', mjs: 'code', cjs: 'code', jsx: 'code',",
-    expectFail: ['F15'],
+    name: 'M67 把完整目录路径代替文件名传给分类器',
+    from: "const name = basename(String(path ?? '')) ?? '';",
+    to: "const name = String(path ?? '');",
+    expectFail: ['F23'],
   },
   {
-    name: 'M68 两种语言共用同一个颜色（ts 与 js 同色）',
-    from: "'.sc_fileIcon[data-kind=typescript]{color:var(--dsw-static-blue-500)}',",
-    to: "'.sc_fileIcon[data-kind=typescript]{color:var(--dsw-static-amber-500)}',",
+    name: 'M68 官方文件图标尺寸误用默认 28px',
+    from: "kind: classifyFileType(name), size, className: 'sc_fileIcon'",
+    to: "kind: classifyFileType(name), size: 28, className: 'sc_fileIcon'",
     expectFail: ['F15'],
   },
   {
@@ -651,36 +651,7 @@ const MUTATIONS = [
     to: '          badge: groupDigits(currentRows.length),',
     expectFail: ['F19'],
   },
-  {
-    name: 'M105 README 前缀再次盖掉真实后缀',
-    from: 'if (Object.hasOwn(FILE_NAME_KINDS, name)) return FILE_NAME_KINDS[name];',
-    to: 'if (Object.hasOwn(FILE_NAME_KINDS, dot <= 0 ? name : name.slice(0, dot))) return FILE_NAME_KINDS[dot <= 0 ? name : name.slice(0, dot)];',
-    expectFail: ['F23'],
-  },
-  {
-    name: 'M106 环境变量配置的多段文件名不再识别',
-    from: "      if (name.startsWith('.env.')) return 'config';",
-    to: '',
-    expectFail: ['F23'],
-  },
-  {
-    name: 'M107 JS / TS 再次共用图形但保留不同颜色',
-    from: 'for (const [kind, label] of Object.entries(FILE_LANGUAGE_LABELS)) FILE_MARKS[kind] = { label };',
-    to: 'for (const [kind, label] of Object.entries(FILE_LANGUAGE_LABELS)) FILE_MARKS[kind] = { label }; FILE_MARKS.typescript = FILE_MARKS.javascript;',
-    expectFail: ['F24'],
-  },
-  {
-    name: 'M108 扩展名再次误命中对象原型属性',
-    from: 'if (Object.hasOwn(FILE_EXT_KINDS, ext)) return FILE_EXT_KINDS[ext];',
-    to: 'if (FILE_EXT_KINDS[ext] !== undefined) return FILE_EXT_KINDS[ext];',
-    expectFail: ['F23'],
-  },
-  {
-    name: 'M109 Kotlin 再次显示 Java 的类型与图标',
-    from: "kt: 'kotlin', kts: 'kotlin'",
-    to: "kt: 'java', kts: 'java'",
-    expectFail: ['F23'],
-  },
+
 ];
 
 /**

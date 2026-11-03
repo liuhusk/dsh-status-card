@@ -27,7 +27,7 @@ while you are looking at a global panel (plugins, schedules, …).
 | To-dos | The official current `todos` projection, with check rings, a progress pill and a **2px** progress bar. A separate, read-only history group retains the most recent earlier turn's last list and labels its actual turn number | Current tasks keep their fold / Show all controls (hard cap 200). The historical list is **collapsed by default** and stays separate from the current turn. It is reconstructed from the session log; an explicitly cleared list is not revived |
 | Goal | Official goal text, phase, round and blocked reason, plus the host's live activation. An active goal that is disarmed reads **Ready to continue** and offers **Resume** | **Edit** (Enter saves / Esc cancels), **pause**, **resume**, **clear**, through the official remote and CAS reference. Drafts and pending requests are bound to the session and goal identity; switching either closes the editor and ignores late responses |
 | Plans | Plans submitted in this session, served by the plugin's host route (`exit_plan_mode` titles, newest first, up to 20). A bare row (no fill, same width as the content above) with a self-drawn "bulb + sparks" glyph in the accent color and an external-link icon at the right end | Click a row to open that plan in the right-hand preview pane using the official `plan` preview type |
-| Changed files | Session-wide list of changed paths de-duplicated by path (colored file-type icon per extension — js / ts / json / py / rs / go / java / C family / shell / css / config (yaml·toml·ini) / sql / markdown / excel / html / image / pdf / ppt / video / word / generic code / other) with `+added / -deleted` totals. With several turns the list splits into "This turn · n files" and "Earlier changes · n files" | Click a row to open that file in the official change-review pane |
+| Changed files | Session-wide list of changed paths de-duplicated by path (the same file icons and classification as DSH Workspace Files) with `+added / -deleted` totals. With several turns the list splits into "This turn · n files" and "Earlier changes · n files" | Click a row to open that file in the official change-review pane |
 | Subagents | Sub-sessions whose `parentId` points at this session; the row mirrors the official directory row: status dot + two-line text (spawn `label`; session title · mode · activity) + **token usage and elapsed time on separate right-aligned lines** + chevron. Rows are **grouped by delegation turn**: the current turn is expanded, older turns fold into "Earlier N turns · m". `agentTeam` teammates are not shown as a second row — a teammate already is a sub-session | Click a row to switch the whole workspace to that sub-session through `ctx.uiWorkspace.openSession(...)`. A teammate row without a session yet (still `provisioning`) is a fallback and is not clickable |
 | Background jobs | Jobs the agent started in the background, mirroring the host's own background-task panel: status dot, `bash` kind pill, the command in mono, the settled reason (`exit code: 0`) and the duration — or the live `2/10` progress while it runs. Running jobs are always listed; finished ones fold into a "n finished" group — **collapsed by default**, even when nothing is running — with a **Clear** button on the right | **Stop** on running rows (two-step: the 20×20 square turns into a red-outlined "Confirm stop" label; a second click sends it; 3s without confirmation disarms). A pending request stays disabled until it settles, and a `stopping` row cannot be stopped again. Read-only otherwise. **Clear** only hides finished rows in this browser session — the host keeps its records. Live output is still opened from the host's panel, not here |
 
@@ -92,13 +92,11 @@ stays. A turn's timing alone counts as content.
   `fab`, CSS transitions both sides (`transform:scale(.16)` + fade for the card, the reverse for the
   button), and `visibility` is delayed to the end of the animation.
 - **Section order is fixed**: timing → plans → goal → current to-dos → historical to-dos → changes → subagents → background jobs (the smoke suite pins it).
-- **Icons are self-drawn SVG**: one monochrome family (10/12/14/16px, `stroke: currentColor`) and a colored
-  file-type family (16px, 28-grid view). Official icon packages belong to `dsh-client-ui-primitives` and
-  must not be imported by a plugin. Code languages have distinct white labels (`JS`, `TS`, `PY`, `RS`,
-  `GO`, `JAVA`, `C`, `C++`, `C#`, `KT`, `VUE`, etc.) instead of sharing a generic `</>` glyph. Classification
-  uses the actual extension, with exact filename rules for `README`, `Dockerfile` and dotfiles, plus
-  `.env.*` environment variants. `README.json` is JSON; `README.py` is Python. Unknown formats keep a
-  neutral fallback icon.
+- **File icons reuse DSH Workspace Files**: changed-file rows call the same `classifyFileType(name)` and
+  `FileTypeIcon({ kind, size: 16 })` exports from `@deepseek-ai/dsh-client-ui-primitives` as the workspace
+  file browser. The plugin contains no file artwork, language labels, extension map or file-color overrides.
+  Names such as `package.json`, `.gitignore`, `.tsx` and `.env.*` follow the installed DSH version's rules.
+  Only the existing monochrome action icons remain self-drawn.
 - **Host half** (`index.js`): scans the session log for `workspace/changes` and `exit_plan_mode` plans,
   keeps an incremental per-session index, folds the turn timing described above, and serves everything
   from `GET /api/status-card.changes` (`no-store`, `lastSeq` / `lastTurn` / `plans` / `timing` /
@@ -125,7 +123,7 @@ controller of that line).
 dsh plugin --profile web add github:liuhusk/dsh-status-card
 
 # or pin a release tag (see Releases)
-dsh plugin --profile web add github:liuhusk/dsh-status-card#v0.23.2
+dsh plugin --profile web add github:liuhusk/dsh-status-card#v0.23.3
 ```
 
 Or from a local checkout, through the in-app plugin manager (Creator mode / Full access):
@@ -183,11 +181,9 @@ the plugin marketplace displays):
   or you simply walking away, is not counted.
 - Subagent rows only jump to the session; there is no recursive expansion of nested sub-subagent trees.
   A teammate row without a durable sub-session cannot be clicked.
-- File-type icons use local SVG marks and `--dsw-*` tokens rather than external brand assets. Languages
-  have their own labels; configurations, documents and media retain their corresponding shapes. Colors
-  may be shared, so language identity is also carried by the label. Full path/type and glyph coverage is
-  automated. The current live changes route is empty, so per-language visual checks are recorded as
-  component regressions rather than live observations.
+- Shared file icons require the host's `FileTypeIcon` and `classifyFileType` exports. This narrow direct
+  reuse follows the requested Workspace Files behavior and was verified on DSH 0.2.1-rc.5; it adds no npm
+  icon dependency or copied assets. Classification and appearance follow the installed host version.
 - The official goal bar stays visible, so a goal has two sets of buttons that share the same remote and CAS
   reference. Whichever loses gets `GOAL_STALE_REVISION` and shows it.
 - The plan index survives a host restart (derived from the session log); per-file line counts do not,

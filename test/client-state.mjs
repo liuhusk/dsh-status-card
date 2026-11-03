@@ -68,7 +68,11 @@ function harness() {
   const marker = "    return {\n      inject: ['slots', 'sessions', 'locale'],";
   assert.ok(source.includes(marker), 'Client test exposure anchor must remain valid');
   vm.runInNewContext(source.replace(marker, `    globalThis.clientTest = { GoalBlock, JobsBlock, useJobsRows, useGoalActivation, useTimingNow, timingSegments, PreviousTasksBlock, zh };\n${marker}`), context);
-  manifest.factory((name) => { assert.equal(name, 'react'); return React; });
+  manifest.factory((name) => {
+    if (name === 'react') return React;
+    assert.equal(name, '@deepseek-ai/dsh-client-ui-primitives');
+    return { FileTypeIcon: () => null, classifyFileType: (path) => path };
+  });
   const api = context.clientTest;
   const t = (key, values = {}) => String(api.zh[key] ?? key).replace(/\{(\w+)\}/gu, (_, name) => String(values[name] ?? ''));
 
