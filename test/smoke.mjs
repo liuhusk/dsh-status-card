@@ -24,6 +24,7 @@ const MAIN = 'sess-main';
 /** 与源码一致的闸门常量与接管标记（写成字面量，避免从源码里反抄导致断言恒真）。 */
 const HIDE_BELOW_CONTENT_WIDTH = 820;
 const HIDE_TODO_ATTR = 'data-status-card-hide-todo';
+const ROW_LIMIT_FOR_TEST = 6;
 
 /* ------------------------------------------------------------------ 迷你 React */
 
@@ -2051,13 +2052,9 @@ await runCase('F15 变更行用彩色文件类型图标：按语言分类（js/t
   // 每颗图标都有「页形 + 折角 + 类型标记」三部分（other 只有页形 + 折角）。
   const markCount = icons.map((node) => findAll(node, (item) => item.props?.['data-file-type-mark'] === true).length);
   expect(markCount.join() === '1,1,1,1,1,1', `类型标记组数量为 ${JSON.stringify(markCount)}`);
-  // 标记本身的笔画数也要按类型不同：markdown 一个 MD 字标 · javascript 三条括号 · json 一对花括号 ·
-  // python 三条括号 · css 井号四条 · image 三块山路。
-  const markPaths = icons.map((node) => {
-    const group = findAll(node, (item) => item.props?.['data-file-type-mark'] === true)[0];
-    return group === undefined ? 0 : findAll(group, (item) => item.type !== undefined && item.props?.d !== undefined).length;
-  });
-  expect(markPaths.join() === '1,3,2,3,4,3', `类型标记笔画数为 ${JSON.stringify(markPaths)}，各类型应各不相同`);
+  // 语言图标必须有可辨认的实际字标，不能只换 data-kind / 颜色、继续共用 </>。
+  expect(textOf(icons[1]) === 'JS', 'JavaScript 图标缺少 JS 字标');
+  expect(textOf(icons[3]) === 'PY', 'Python 图标缺少 PY 字标');
   // 颜色只允许来自 token：类型色是 --dsw-static-*，标记是 --dsw-static-neutral-00。
   const colorOf = (kind) => new RegExp(`\\.sc_fileIcon\\[data-kind=${kind}\\][^{]*\\{color:var\\(--dsw-static-[a-z0-9-]+\\)`).test(env.css);
   for (const kind of ['code', 'markdown', 'excel', 'image', 'pdf',
@@ -2083,6 +2080,54 @@ await runCase('F15 变更行用彩色文件类型图标：按语言分类（js/t
     'pdf 的颜色应与侧边栏一致（red-600）');
   // 图标里不许出现字面色值（颜色只能走 token）。
   expect(!/#[0-9a-f]{3,8}\b|rgba?\(/iu.test(env.css), '样式里出现了字面色值，颜色必须走 --dsw-* token');
+});
+
+await runCase('F23 文件图标按真实后缀与完整文件名分类，不受目录、原型属性或 README 前缀干扰', async () => {
+  const cases = [
+    ['src/app.JS', 'javascript'], ['src/app.mjs', 'javascript'], ['src/app.cjs', 'javascript'],
+    ['src/View.jsx', 'javascript'], ['src/view.TSX', 'typescript'], ['src/index.d.ts', 'typescript'],
+    ['src/app.mts', 'typescript'], ['src/app.cts', 'typescript'], ['C:\\repo\\config.JSONC', 'json'],
+    ['README', 'markdown'], ['README.json', 'json'], ['README.py', 'python'],
+    ['CHANGELOG.js', 'javascript'], ['Makefile.json', 'json'], ['Dockerfile', 'code'],
+    ['Makefile', 'code'], ['Dockerfile.dev', 'code'], ['.env', 'config'],
+    ['.env.local', 'config'], ['.env.production', 'config'], ['.env.example', 'config'],
+    ['.gitignore', 'config'], ['.editorconfig', 'config'], ['.bashrc', 'shell'],
+    ['src/Main.java', 'java'], ['src/Main.kt', 'kotlin'], ['src/Main.scala', 'scala'],
+    ['src/Main.groovy', 'groovy'], ['src/main.cljs', 'clojure'], ['src/main.cs', 'csharp'],
+    ['src/main.swift', 'swift'], ['src/main.cpp', 'cpp'], ['src/main.c', 'clang'],
+    ['src/App.vue', 'vue'], ['src/module.rs', 'rust'], ['src/main.go', 'go'],
+    ['data/query.sql', 'sql'], ['README.txt', 'other'], ['src/a.unknown', 'other'],
+    ['folder.py/a.unknown', 'other'], ['file.constructor', 'other'], ['file.__proto__', 'other'],
+    ['constructor', 'other'], ['file.toString', 'other'],
+  ];
+  // 默认只展示六行；分批检查真实变更行，保持断言覆盖 path → icon 的完整链路。
+  for (let start = 0; start < cases.length; start += ROW_LIMIT_FOR_TEST) {
+    const batch = cases.slice(start, start + ROW_LIMIT_FOR_TEST);
+    const { tree } = await render({ fetchImpl: changesFetch(batch.map(([path]) => fileRow(path))) });
+    const icons = findAll(blockOf(tree, 'changes'), (node) => hasClass(node, 'sc_fileIcon'));
+    expect(icons.length === batch.length, `图标数量不符：${JSON.stringify(batch)}`);
+    for (const [index, [path, kind]] of batch.entries()) {
+      expect(icons[index].props['data-kind'] === kind,
+        `${path} 应为 ${kind}，实际为 ${String(icons[index].props['data-kind'])}`);
+      const marks = findAll(icons[index], (node) => node.props?.['data-file-type-mark'] === true);
+      expect(marks.length === (kind === 'other' ? 0 : 1), `${path} 的类型标记数量不符`);
+    }
+  }
+});
+
+await runCase('F24 JS / TS / Python / Rust / Go / Java 的实际图标标记独立可辨', async () => {
+  const { tree } = await render({ fetchImpl: changesFetch([
+    fileRow('main.js'), fileRow('main.ts'), fileRow('main.py'),
+    fileRow('main.rs'), fileRow('main.go'), fileRow('Main.java'),
+  ]) });
+  const icons = findAll(blockOf(tree, 'changes'), (node) => hasClass(node, 'sc_fileIcon'));
+  const labels = icons.map((node) => textOf(node));
+  expect(labels.join() === 'JS,TS,PY,RS,GO,JAVA', `语言标记错误：${JSON.stringify(labels)}`);
+  const glyphs = icons.map((icon) => {
+    const mark = findAll(icon, (node) => node.props?.['data-file-type-mark'] === true)[0];
+    return JSON.stringify(mark?.props.children);
+  });
+  expect(new Set(glyphs).size === 6, '不同语言仍共用了同一图形，仅颜色不同');
 });
 
 await runCase('F16 子会话的计划用官方五段地址（plan/subagent/<parent>/<child>/<mode>/<callId>）', async () => {

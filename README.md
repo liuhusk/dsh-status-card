@@ -94,7 +94,11 @@ stays. A turn's timing alone counts as content.
 - **Section order is fixed**: timing → plans → goal → current to-dos → historical to-dos → changes → subagents → background jobs (the smoke suite pins it).
 - **Icons are self-drawn SVG**: one monochrome family (10/12/14/16px, `stroke: currentColor`) and a colored
   file-type family (16px, 28-grid view). Official icon packages belong to `dsh-client-ui-primitives` and
-  must not be imported by a plugin.
+  must not be imported by a plugin. Code languages have distinct white labels (`JS`, `TS`, `PY`, `RS`,
+  `GO`, `JAVA`, `C`, `C++`, `C#`, `KT`, `VUE`, etc.) instead of sharing a generic `</>` glyph. Classification
+  uses the actual extension, with exact filename rules for `README`, `Dockerfile` and dotfiles, plus
+  `.env.*` environment variants. `README.json` is JSON; `README.py` is Python. Unknown formats keep a
+  neutral fallback icon.
 - **Host half** (`index.js`): scans the session log for `workspace/changes` and `exit_plan_mode` plans,
   keeps an incremental per-session index, folds the turn timing described above, and serves everything
   from `GET /api/status-card.changes` (`no-store`, `lastSeq` / `lastTurn` / `plans` / `timing` /
@@ -121,7 +125,7 @@ controller of that line).
 dsh plugin --profile web add github:liuhusk/dsh-status-card
 
 # or pin a release tag (see Releases)
-dsh plugin --profile web add github:liuhusk/dsh-status-card#v0.23.1
+dsh plugin --profile web add github:liuhusk/dsh-status-card#v0.23.2
 ```
 
 Or from a local checkout, through the in-app plugin manager (Creator mode / Full access):
@@ -179,9 +183,11 @@ the plugin marketplace displays):
   or you simply walking away, is not counted.
 - Subagent rows only jump to the session; there is no recursive expansion of nested sub-subagent trees.
   A teammate row without a durable sub-session cannot be clicked.
-- File-type icons are not brand logos: the plugin may only use `--dsw-*` tokens, so it draws the same page
-  shape with a white glyph and a per-language color. Markdown / JavaScript / JSON colors were checked by
-  eye, the rest only by assertions.
+- File-type icons use local SVG marks and `--dsw-*` tokens rather than external brand assets. Languages
+  have their own labels; configurations, documents and media retain their corresponding shapes. Colors
+  may be shared, so language identity is also carried by the label. Full path/type and glyph coverage is
+  automated. The current live changes route is empty, so per-language visual checks are recorded as
+  component regressions rather than live observations.
 - The official goal bar stays visible, so a goal has two sets of buttons that share the same remote and CAS
   reference. Whichever loses gets `GOAL_STALE_REVISION` and shows it.
 - The plan index survives a host restart (derived from the session log); per-file line counts do not,

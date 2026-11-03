@@ -1,11 +1,29 @@
 # Verification status
 
 What has actually been checked, on which host, and what is still unverified. Test suites are part of the
-repository: `npm test` (103 smoke assertions plus 39 state regressions) and `npm run test:mutate` (104 mutations; each mutant re-runs only the cases
+repository: `npm test` (105 smoke assertions plus 39 state regressions) and `npm run test:mutate` (109 mutations; each mutant re-runs only the cases
 it is expected to break, via `SC_ONLY`, in an 8-way parallel pool — the control run is always full).
 
 Host used for the earlier live checks: DSH 0.2.1-rc.3, Web UI served on `http://127.0.0.1:3080`, installed into the
 `web` profile with a `link:` to the working copy, macOS, light and dark themes.
+
+## 0.23.2 file-icon checks — 2026-11-03
+
+- Root causes: filename-prefix rules overrode actual extensions (`README.json` became Markdown), while
+  JavaScript, TypeScript, Python and other language kinds all shared the same generic code glyph.
+- Classification now uses complete-name exceptions and the actual extension, handles `.env` / `.env.*`
+  and common dotfiles, separates Kotlin / Scala / Groovy / Clojure / Swift / C# / C++ / Vue, and rejects
+  inherited object keys such as `constructor` and `__proto__`. Language SVG marks use independent labels.
+- Regression-first check: F15 / F23 / F24 all failed on the old implementation for the intended reasons.
+  After the fix, 105/105 smoke cases and 39/39 state regressions pass. F23 covers 44 path/type examples,
+  including mixed case, Windows paths, declarations, exact names and unknown extensions; F24 checks the
+  actual rendered JS / TS / PY / RS / GO / JAVA marks. All 109 expected mutation outcomes pass, including
+  restored prefix precedence, lost dotenv variants, shared JS/TS glyphs and prototype-key regressions.
+- Current DSH 0.2.1-rc.5 profile: removed and reinstalled the linked bundle through the official manager;
+  both returned `application: applied`, no warnings, installed version 0.23.2. Refreshed the authenticated
+  Web page. The card loads normally. Its live changes route currently returns zero files, so individual
+  file icons are covered by actual-component regressions rather than claimed as live visual checks.
+- No Host/data-source changes, dependencies or external icon imports were introduced.
 
 ## 0.23.1 artwork checks — 2026-11-02
 
@@ -53,7 +71,7 @@ Host used for the earlier live checks: DSH 0.2.1-rc.3, Web UI served on `http://
 - Static checks: `node --check` on both halves, `package.json` / locale JSON parse, zh/en locale key sets
   identical, every manifest reference (`icon`, `exports`, `dsh.bundle.patch`, `files`) resolves,
   `client.js` has no top-level `export` (it is loaded through `window.__ModuleLoader__`).
-- Smoke, 103 assertions with a stubbed `__ModuleLoader__` and a React hook shim, rendering the seat
+- Smoke, 105 assertions with a stubbed `__ModuleLoader__` and a React hook shim, rendering the seat
   component directly: registration contract (inject array / seat `shell.overlay` / order / locale namespace
   / style injection), no color literals in the stylesheet, the official to-do dock selector, no render
   without a session, empty state still rendered and the main content element marked, a turn with only
@@ -117,7 +135,7 @@ Host used for the earlier live checks: DSH 0.2.1-rc.3, Web UI served on `http://
   orphan `tool/result` ignored), incremental rescan keeping timing state, and the three non-overlapping
   waiting segments (plan approval counted as waiting and not as tool time, an approval window subtracted
   from `toolMs`, sum ≤ wall clock, `waitSince` null after `turn/end`).
-- Mutation testing, 104 mutations, each required to turn a named assertion from PASS to FAIL: background
+- Mutation testing, 109 mutations, each required to turn a named assertion from PASS to FAIL: background
   regressions (`bg-overlay`), removed hide-official-panel rule, gates stuck open, anchor disappearing with
   the card, unknown width treated as no room, lost `Math.round`, `>=`→`>`, marker not following the gate,
   layout regressions (280px card, 16px title, missing total, alpha-based diff colors, `auto` columns,

@@ -273,6 +273,8 @@ window.__ModuleLoader__.load({
       '.sc_fileIcon[data-kind=go]{color:var(--dsw-static-blue-400)}',
       '.sc_fileIcon[data-kind=java]{color:var(--dsw-static-red-500)}',
       '.sc_fileIcon[data-kind=clang]{color:var(--dsw-static-blue-600)}',
+      '.sc_fileIcon[data-kind=cpp],.sc_fileIcon[data-kind=csharp],.sc_fileIcon[data-kind=objectivec],.sc_fileIcon[data-kind=swift],.sc_fileIcon[data-kind=kotlin],.sc_fileIcon[data-kind=scala],.sc_fileIcon[data-kind=groovy],.sc_fileIcon[data-kind=clojure]{color:var(--dsw-static-blue-600)}',
+      '.sc_fileIcon[data-kind=vue]{color:var(--dsw-static-green-500)}',
       '.sc_fileIcon[data-kind=shell]{color:var(--dsw-static-neutral-bluish-500)}',
       '.sc_fileIcon[data-kind=stylesheet]{color:var(--dsw-static-blue-450)}',
       '.sc_fileIcon[data-kind=config]{color:var(--dsw-static-neutral-bluish-600)}',
@@ -1560,16 +1562,14 @@ window.__ModuleLoader__.load({
         ],
       },
     };
-    // 语言之间先靠颜色分家（见 `.sc_fileIcon[data-kind=…]`），标记复用四种常见字形：
-    // 括号（脚本类）、花括号（json）、井号（样式）、终端提示符（shell）、三条线（键值配置）。
-    FILE_MARKS.javascript = FILE_MARKS.code;
-    FILE_MARKS.typescript = FILE_MARKS.code;
-    FILE_MARKS.python = FILE_MARKS.code;
-    FILE_MARKS.rust = FILE_MARKS.code;
-    FILE_MARKS.go = FILE_MARKS.code;
-    FILE_MARKS.java = FILE_MARKS.code;
-    FILE_MARKS.clang = FILE_MARKS.code;
-    FILE_MARKS.sql = FILE_MARKS.code;
+    // 技术缩写作为 SVG 图形标记：语言不能只换颜色、继续共用 </>。
+    // 保留通用 code 兜底；每种已识别语言都显示自己的标记，不借用另一种语言的名称。
+    const FILE_LANGUAGE_LABELS = {
+      javascript: 'JS', typescript: 'TS', python: 'PY', rust: 'RS', go: 'GO', java: 'JAVA',
+      clang: 'C', cpp: 'C++', csharp: 'C#', objectivec: 'OC', swift: 'SW',
+      kotlin: 'KT', scala: 'SC', groovy: 'GRV', clojure: 'CLJ', vue: 'VUE', sql: 'SQL',
+    };
+    for (const [kind, label] of Object.entries(FILE_LANGUAGE_LABELS)) FILE_MARKS[kind] = { label };
     FILE_MARKS.json = FILE_MARKS.braces;
     FILE_MARKS.stylesheet = FILE_MARKS.hash;
     FILE_MARKS.shell = FILE_MARKS.terminal;
@@ -1747,7 +1747,7 @@ window.__ModuleLoader__.load({
       return settled + Math.max(0, through - row.activeSince);
     }
 
-    /** 扩展名 → 通用文件类型（与侧边栏同一套归类口径；品牌类型在这里统一落到 code）。 */
+    /** 扩展名 → 文件类型；有专属语言标记的不能合并成另一种语言。 */
     const FILE_EXT_KINDS = {
       md: 'markdown', mdx: 'markdown', markdown: 'markdown',
       csv: 'excel', tsv: 'excel', xls: 'excel', xlsx: 'excel', xlsm: 'excel', ods: 'excel',
@@ -1758,45 +1758,50 @@ window.__ModuleLoader__.load({
       ppt: 'ppt', pptx: 'ppt', key: 'ppt',
       doc: 'word', docx: 'word', rtf: 'word', odt: 'word',
       mp4: 'video', mov: 'video', m4v: 'video', webm: 'video', mkv: 'video', avi: 'video',
-      // 代码再按语言分家：颜色 + 标记都不同，一眼能分出 js / ts / json / py / rs / go…
+      // 代码按语言分家：独立字标区分语言，token 配色辅助识别。
       js: 'javascript', mjs: 'javascript', cjs: 'javascript', jsx: 'javascript',
       ts: 'typescript', tsx: 'typescript', mts: 'typescript', cts: 'typescript',
       json: 'json', json5: 'json', jsonc: 'json',
       py: 'python', pyi: 'python',
       rs: 'rust',
       go: 'go',
-      java: 'java', kt: 'java', kts: 'java', scala: 'java', groovy: 'java', clj: 'java', cljs: 'java',
-      c: 'clang', cc: 'clang', cpp: 'clang', cxx: 'clang', h: 'clang', hh: 'clang', hpp: 'clang',
-      cs: 'clang', swift: 'clang', m: 'clang', mm: 'clang',
+      java: 'java', kt: 'kotlin', kts: 'kotlin', scala: 'scala', groovy: 'groovy',
+      clj: 'clojure', cljs: 'clojure', cljc: 'clojure',
+      c: 'clang', h: 'clang', cc: 'cpp', cpp: 'cpp', cxx: 'cpp', hh: 'cpp', hpp: 'cpp', hxx: 'cpp',
+      cs: 'csharp', swift: 'swift', m: 'objectivec', mm: 'objectivec', vue: 'vue',
       sh: 'shell', bash: 'shell', zsh: 'shell', fish: 'shell', ps1: 'shell', bat: 'shell', cmd: 'shell',
       css: 'stylesheet', scss: 'stylesheet', sass: 'stylesheet', less: 'stylesheet',
       yaml: 'config', yml: 'config', toml: 'config', ini: 'config', env: 'config', conf: 'config',
       sql: 'sql',
     };
-    /** 无扩展名或按文件名认的类型（README / CHANGELOG 一律当 markdown）。 */
+    /** 只匹配完整文件名：README.json 必须按 json，不能被 README 前缀抢走。 */
     const FILE_NAME_KINDS = {
       readme: 'markdown', changelog: 'markdown', contributing: 'markdown',
       dockerfile: 'code', makefile: 'code', gnumakefile: 'code', rakefile: 'code',
+      '.env': 'config', '.gitignore': 'config', '.gitattributes': 'config', '.gitmodules': 'config',
+      '.editorconfig': 'config', '.npmrc': 'config', '.yarnrc': 'config',
+      '.bashrc': 'shell', '.zshrc': 'shell', '.profile': 'shell', '.bash_profile': 'shell',
     };
     const FILE_CODE_EXTS = new Set([
-      'vue', 'svelte', 'astro', 'xml', 'rb', 'php', 'proto', 'graphql', 'gql', 'lua', 'r', 'pl',
+      'svelte', 'astro', 'xml', 'rb', 'php', 'proto', 'graphql', 'gql', 'lua', 'r', 'pl',
       'ex', 'exs', 'erl', 'hs', 'dart', 'lock', 'mod', 'sum',
     ]);
 
-    /** 文件名 → 通用类型：先按整名（README）、再按扩展名，认不出就是 other。 */
+    /** 文件名 → 类型：完整名特例、真实扩展名、约定的配置/构建变体，未知类型兜底。 */
     function fileKindOf(path) {
-      const name = basename(String(path ?? '')).toLowerCase();
+      const name = (basename(String(path ?? '')) ?? '').toLowerCase();
       const dot = name.lastIndexOf('.');
-      const stem = dot <= 0 ? name : name.slice(0, dot);
       const ext = dot <= 0 ? '' : name.slice(dot + 1);
-      if (FILE_NAME_KINDS[stem] !== undefined) return FILE_NAME_KINDS[stem];
-      if (FILE_EXT_KINDS[ext] !== undefined) return FILE_EXT_KINDS[ext];
+      if (Object.hasOwn(FILE_NAME_KINDS, name)) return FILE_NAME_KINDS[name];
+      if (Object.hasOwn(FILE_EXT_KINDS, ext)) return FILE_EXT_KINDS[ext];
       if (FILE_CODE_EXTS.has(ext)) return 'code';
+      if (name.startsWith('.env.')) return 'config';
+      if (/^(dockerfile|makefile|gnumakefile|rakefile)\./u.test(name)) return 'code';
       return 'other';
     }
 
     /**
-     * 彩色文件类型图标（16px）：色块页形 + 白色类型标记，和侧边栏「工作区文件」里的文件行同款。
+     * 彩色文件类型图标（16px）：统一页形 + 白色类型标记，语言缩写独立于颜色。
      * 颜色不写在组件里，由 `.sc_fileIcon[data-kind=…]` 统一上色。
      */
     function FileIcon({ path, size = 16 }) {
@@ -1814,9 +1819,15 @@ window.__ModuleLoader__.load({
           color: 'var(--dsw-static-neutral-00)',
           'data-file-type-mark': true,
           transform: mark.transform ?? undefined,
-        }, mark.paths.map((item, index) => h('path', item.stroke === undefined
-          ? { key: index, d: item.d, fill: 'currentColor' }
-          : { key: index, d: item.d, fill: 'none', stroke: 'currentColor', strokeWidth: item.stroke }))));
+        }, mark.label !== undefined
+          ? h('text', {
+            x: 14, y: 20, fill: 'currentColor', textAnchor: 'middle',
+            fontFamily: 'Arial, sans-serif', fontWeight: 800,
+            fontSize: mark.label.length > 3 ? 7.5 : mark.label.length > 2 ? 9 : 11,
+          }, mark.label)
+          : mark.paths.map((item, index) => h('path', item.stroke === undefined
+            ? { key: index, d: item.d, fill: 'currentColor' }
+            : { key: index, d: item.d, fill: 'none', stroke: 'currentColor', strokeWidth: item.stroke }))));
       }
       return h('svg', {
         className: 'sc_fileIcon',

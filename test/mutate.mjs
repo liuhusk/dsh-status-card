@@ -404,8 +404,8 @@ const MUTATIONS = [
   },
   {
     name: 'M64 文件类型一律落到 other（不再按扩展名分类）',
-    from: "      if (FILE_EXT_KINDS[ext] !== undefined) return FILE_EXT_KINDS[ext];",
-    to: "      if (FILE_EXT_KINDS[ext] !== undefined) return 'other';",
+    from: "      if (Object.hasOwn(FILE_EXT_KINDS, ext)) return FILE_EXT_KINDS[ext];",
+    to: "      if (Object.hasOwn(FILE_EXT_KINDS, ext)) return 'other';",
     expectFail: ['F15'],
   },
   {
@@ -650,6 +650,36 @@ const MUTATIONS = [
     from: '          badge: groupDigits(total),',
     to: '          badge: groupDigits(currentRows.length),',
     expectFail: ['F19'],
+  },
+  {
+    name: 'M105 README 前缀再次盖掉真实后缀',
+    from: 'if (Object.hasOwn(FILE_NAME_KINDS, name)) return FILE_NAME_KINDS[name];',
+    to: 'if (Object.hasOwn(FILE_NAME_KINDS, dot <= 0 ? name : name.slice(0, dot))) return FILE_NAME_KINDS[dot <= 0 ? name : name.slice(0, dot)];',
+    expectFail: ['F23'],
+  },
+  {
+    name: 'M106 环境变量配置的多段文件名不再识别',
+    from: "      if (name.startsWith('.env.')) return 'config';",
+    to: '',
+    expectFail: ['F23'],
+  },
+  {
+    name: 'M107 JS / TS 再次共用图形但保留不同颜色',
+    from: 'for (const [kind, label] of Object.entries(FILE_LANGUAGE_LABELS)) FILE_MARKS[kind] = { label };',
+    to: 'for (const [kind, label] of Object.entries(FILE_LANGUAGE_LABELS)) FILE_MARKS[kind] = { label }; FILE_MARKS.typescript = FILE_MARKS.javascript;',
+    expectFail: ['F24'],
+  },
+  {
+    name: 'M108 扩展名再次误命中对象原型属性',
+    from: 'if (Object.hasOwn(FILE_EXT_KINDS, ext)) return FILE_EXT_KINDS[ext];',
+    to: 'if (FILE_EXT_KINDS[ext] !== undefined) return FILE_EXT_KINDS[ext];',
+    expectFail: ['F23'],
+  },
+  {
+    name: 'M109 Kotlin 再次显示 Java 的类型与图标',
+    from: "kt: 'kotlin', kts: 'kotlin'",
+    to: "kt: 'java', kts: 'java'",
+    expectFail: ['F23'],
   },
 ];
 

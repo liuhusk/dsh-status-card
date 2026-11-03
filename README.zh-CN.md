@@ -183,13 +183,13 @@
   铺在内容区上会和界面底色明显割裂。
   图标全部**自绘 SVG**，官方图标属于 `dsh-client-ui-primitives`，插件不得引用。只有两个家族：
   单色线性图标 `sc_icon`（`ICON_PATHS`，14/15/16px、stroke 取 `currentColor`）与**彩色文件类型图标**
-  `sc_fileIcon`（16px、28 格视图）。后者的几何（页形 AA + 折角 z8 + 各类型白字标记）与归类口径
-  （`classifyFileType` 的通用分支）都抄自宿主侧边栏「工作区文件」用的那一套，但**颜色不写进组件**，
-  一律由 `.sc_fileIcon[data-kind=…]` 给 `--dsw-static-*` token——品牌 logo 是字面色值，本仓库规范不允许。
-  区分靠两条腿：**颜色按语言**（js amber-500 / ts blue-500 / json amber-400 / py green-500 / rs amber-600 /
-  go blue-400 / java red-500 / C 系 blue-600 / shell neutral-bluish-500 / css blue-450 / 配置 neutral-bluish-600 /
-  sql deepseek-450，两两不同，F15 守着）＋**标记按家族**（`</>` 脚本、`{}` json、`#` 样式、`>_` shell、
-  三条线 键值配置、`MD` markdown、以及官方原有的表格/地球/山景/PDF/P/★/W）。
+  `sc_fileIcon`（16px、28 格视图）。文件图标保留统一页形与折角，**颜色不写进组件**，
+  一律由 `.sc_fileIcon[data-kind=…]` 使用 `--dsw-static-*` token。语言使用独立白色字标：
+  `JS` / `TS` / `PY` / `RS` / `GO` / `JAVA` / `C` / `C++` / `C#` / `KT` / `VUE` 等，
+  不再仅换颜色而共用 `</>`；JSON 花括号、样式井号、shell 提示符与文档/媒体标记保留。
+  分类按实际扩展名，`README` / `Dockerfile` / 点文件只匹配完整文件名，另识别 `.env.*` 等约定变体：
+  `README.json` 是 JSON，`README.py` 是 Python；Kotlin、Swift、C# 等各有自己的类型，未知格式保持通用兜底。
+  F15 / F23 / F24 覆盖真实变更行的分类、标记和颜色，并检查 Windows 路径、大小写及原型属性边界。
 - **依赖声明必须是数组**：`index.js` 的 `export const inject = [...]`。cordis 的「对象形式」不是
   required/optional 语义，而是「服务名 → 拦截配置」映射——写成 `{ required, optional }` 会被解析成
   两个并不存在的服务名，fiber 永远停在 PENDING：`apply` 不执行、不抛错、不打日志，路由静默缺失，
@@ -260,7 +260,7 @@
 dsh plugin --profile web add github:liuhusk/dsh-status-card
 
 # 或钉住某个 Release 标签（见 Releases）
-dsh plugin --profile web add github:liuhusk/dsh-status-card#v0.23.1
+dsh plugin --profile web add github:liuhusk/dsh-status-card#v0.23.2
 ```
 
 本地 checkout 场景走应用内插件管理器（Creator 模式 + Full access）：`install_bundle`（target = 本目录
@@ -305,13 +305,13 @@ dsh plugin --profile web add github:liuhusk/dsh-status-card#v0.23.1
 - **静态校验**：`node --check` 两个半边、`package.json` / locale JSON 可解析、locale 键集 zh/en 逐字对齐、
   `cordis.patch.yml` 与 manifest 引用路径齐备、`client.js` 无顶层 `export`（Client 半边由
   `window.__ModuleLoader__` 加载）。
-- **冒烟测试 103/103**：座位注册契约（`inject` 数组 / `shell.overlay` / order 50 / locale 命名空间 / 样式注入）、
+- **冒烟测试 105/105**：座位注册契约（`inject` 数组 / `shell.overlay` / order 50 / locale 命名空间 / 样式注入）、
   样式无颜色字面量且含隐藏官方任务面板的选择器、两道闸门与推让几何、任务 / 目标 / 计划 / 变更 / 子智能体 / 后台任务
   这些区块、耗时行三段互不重叠、Host 半边日志扫描与路由口径，全部用 stub `__ModuleLoader__` + React
   钩子垫片在组件级断言。
 - **状态回归 39/39**：Host 25 项覆盖并行区间去重、开放计时、结束冻结、增量扫描和历史清空；Client 14 项覆盖目标身份与原始 revision、晚响应、activation 竞态、停止请求等待与独立期限、会话首帧隔离、历史折叠和秒针。
 - **0.23.0 真机核对**：DSH 0.2.1-rc.5 通过插件管理器重新加载后返回 `applied`；认证路由已提供新计时字段和第 8 轮历史任务；历史默认收起、展开 3 条；目标编辑草稿切换会话即退出，返回后不复活；计时连续采样增长。详细记录见验证文档。
-- **变异测试 104/104**：每条变异都要求指定用例由 PASS 转 FAIL，证明冒烟断言不是恒真。`smoke.mjs` 支持
+- **变异测试 109/109**：每条变异都要求指定用例由 PASS 转 FAIL，证明冒烟断言不是恒真。`smoke.mjs` 支持
   `SC_ONLY=<用例 id>[,<用例 id>]` 只跑指定用例，变异脚本据此把每条变异缩到「只跑它会弄坏的那几条」，
   再用 8 条并发池跑（整轮 ~6 秒；对照组仍全量跑）。
 - **版式与色阶**（真机，浅色主题）：卡片 372px、`data-sc-block` 顺序为耗时条 → 计划 → 目标 → 本轮任务 → 历史任务 → 变更 → 子智能体 → 后台任务、区块间 1px 线 + 12px 间距、三档色阶与增删数字的实测色值、耗时行无底色且与分区标题同左缘。
@@ -335,7 +335,7 @@ dsh plugin --profile web add github:liuhusk/dsh-status-card#v0.23.1
 仍未验证：
 
 - 目标四个操作按钮尚未逐一真机点击；跨会话、旧响应及恢复激活由确定性回归覆盖，实际核对结果另见验证记录。
-- 文件类型图标只在真机上肉眼看过 markdown / javascript / json 三种，其余语言的配色与标记只有冒烟断言。
+- 0.23.2 文件图标分类、独立语言字标与边界由真实组件回归覆盖；当前会话的变更路由为空，未声称逐种语言均已真机目测。旧版只目测过 markdown / javascript / json。
 - 暗色主题下的整卡版式、右栏开合时的跟随平滑度，以及点文件行是否确实切到官方「变更审查」标签的对应文件。
 - 停止失败的红色「停止失败」态只在冒烟（`F21`）里用假服务覆盖过：真机首次点击就成功，没在真机上见到失败态。
 
@@ -377,11 +377,10 @@ dsh plugin --profile web add github:liuhusk/dsh-status-card#v0.23.1
   （`dsh-experimental-agent-team` 的投影 schema），**`active` 不等于「这一轮还在跑」**——队友跑完后仍是
   `active`，所以不能拿它当「正在运行」：之前照 phase 画圆点，本会话里那颗队友行会一直转圈，与官方
   「只有一个子智能体、已完成」对不上。现在队友行按会话 id 让位给子会话行（见上表）。
-- **文件图标不做品牌 logo**：侧边栏对 `.js/.ts/.json/.node` 这类画的是彩色品牌图（字面色值写死在里面），
-  插件只能用 `--dsw-*` token，因此这里用同款页形 + 白色标记，靠「语言配色 + 标记家族」区分类型。
-  视觉上比品牌图朴素（.js 是橙色括号而不是黄色 JS 方标），但类型辨识度足够，且不违反配色规范。
-  同理，主题里没有紫色 token，`image` / `video` 用 `--dsw-static-blue-400` 代替官方的
-  `--dsh-file-type-violet`；`--dsw-static-*` 里也没有黄色，js 用最接近的 amber-500、json 用 amber-400。
+- **文件图标采用本地标记**：使用统一页形、白色语言缩写与 `--dsw-*` token 配色；例如 JS 与 TS
+  有各自的字标，Kotlin / Swift / C# 也不再借用 Java / C 图标。配置、文档与媒体继续使用对应图形，
+  未知类型使用通用兜底；不依赖官方图标包或外部品牌素材。各类型不保证颜色唯一，辨识同时依靠字标。
+  `image` / `video` 使用 `--dsw-static-blue-400`，JS 使用 amber-500、JSON 使用 amber-400。
 - **官方目标条保留可见**（本插件的目标块是「再给一个可操作入口」，不是替换），所以同一目标在两个
   位置各有一组按钮；两处都走同一条 Remote 与同一份 CAS 引用，不会互相写坏，但哪边先成功另一边
   会收到 `GOAL_STALE_REVISION` 并显示错误。
