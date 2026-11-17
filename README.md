@@ -119,6 +119,9 @@ Requires DSH 0.2.1-rc.3 or newer (the card is built against the `shell.overlay` 
 controller of that line).
 
 ```bash
+# from npm — what the plugin market installs
+dsh plugin --profile web add @liuhusk/dsh-status-card
+
 # straight from GitHub (tracks main)
 dsh plugin --profile web add github:liuhusk/dsh-status-card
 
@@ -134,7 +137,8 @@ Upgrade through the plugin manager and check its result: `applied` means refresh
 host module. Until the new host is active, the client keeps its legacy timing display and omits the
 history group when that field is absent.
 
-No npm publish: install straight from this repository.
+Both paths install identical files — no build step, no dependencies; the npm tarball is packed from the same
+tree as the tagged release.
 
 ## Screenshots
 

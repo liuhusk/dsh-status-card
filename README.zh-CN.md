@@ -249,9 +249,12 @@
 
 要求 DSH **0.2.1-rc.3 及以上**（卡片是针对这一线的 `shell.overlay` 座位与会话控制器写的）。
 
-直接从 GitHub 安装：
+从 npm 或 GitHub 安装：
 
 ```bash
+# 从 npm 安装（插件市场走的就是这条）
+dsh plugin --profile web add @liuhusk/dsh-status-card
+
 # 跟最新 main
 dsh plugin --profile web add github:liuhusk/dsh-status-card
 
@@ -264,7 +267,7 @@ dsh plugin --profile web add github:liuhusk/dsh-status-card#v0.23.3
 通过插件管理器升级后查看结果：`applied` 时刷新页面；`restart-required` 时先重启 `dsh web`，再刷新。
 仅刷新网页不能替换运行中的 Host 模块；新 Host 生效前，Client 保留旧耗时展示，缺少历史字段时不显示历史组。
 
-本包不发 npm，直接从仓库安装。
+两条路装到的文件完全一致（无构建、无依赖）：npm 上的 tarball 与 Release 标签同一份源码打包。
 
 ## 截图
 
